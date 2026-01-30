@@ -107,6 +107,25 @@ sudo dnf install openconnect
 sudo lazyopenconnect
 ```
 
+## Uninstall
+
+```bash
+# Uninstall (prompts for config removal)
+lazyopenconnect uninstall
+
+# Uninstall and remove all data
+lazyopenconnect uninstall --purge
+
+# Uninstall binary only, keep config and passwords
+lazyopenconnect uninstall --keep-config
+
+# If installed to /usr/local/bin (requires sudo)
+sudo lazyopenconnect uninstall
+
+# Homebrew
+brew uninstall lazyopenconnect
+```
+
 ## Configuration
 
 Configuration is stored in `~/.config/lazyopenconnect/config.json`.

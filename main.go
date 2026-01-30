@@ -35,6 +35,11 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "uninstall" {
+		handleUninstall()
+		return
+	}
+
 	if os.Geteuid() != 0 {
 		exe, err := os.Executable()
 		if err != nil {
@@ -110,4 +115,80 @@ func handleUpdate() {
 	}
 
 	fmt.Println("Update successful! Restart lazyopenconnect to use the new version.")
+}
+
+func handleUninstall() {
+	var purge, keepConfig bool
+
+	for _, arg := range os.Args[2:] {
+		switch arg {
+		case "--purge":
+			purge = true
+		case "--keep-config":
+			keepConfig = true
+		case "--help", "-h":
+			fmt.Println("Usage: lazyopenconnect uninstall [OPTIONS]")
+			fmt.Println()
+			fmt.Println("Options:")
+			fmt.Println("  --purge        Remove config, keychain entries, and PATH export without prompting")
+			fmt.Println("  --keep-config  Only remove binary, keep config and keychain")
+			fmt.Println("  --help         Show this help message")
+			return
+		}
+	}
+
+	if purge && keepConfig {
+		fmt.Fprintln(os.Stderr, "Error: --purge and --keep-config are mutually exclusive")
+		os.Exit(1)
+	}
+
+	if helpers.IsHomebrewInstall() {
+		fmt.Println("Installed via Homebrew.")
+		fmt.Println("Uninstall with: brew uninstall lazyopenconnect")
+		return
+	}
+
+	binaryPath := helpers.GetInstallPath()
+	if binaryPath == "" {
+		fmt.Fprintln(os.Stderr, "Error: No installation found")
+		os.Exit(1)
+	}
+
+	if !purge {
+		fmt.Printf("Uninstall lazyopenconnect from %s? [y/N]: ", binaryPath)
+		reader := bufio.NewReader(os.Stdin)
+		response, _ := reader.ReadString('\n')
+		response = strings.TrimSpace(strings.ToLower(response))
+		if response != "y" && response != "yes" {
+			fmt.Println("Uninstall cancelled")
+			return
+		}
+	}
+
+	if err := helpers.RemoveBinary(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if keepConfig {
+		fmt.Println("Uninstall complete (config preserved)")
+		return
+	}
+
+	removeData := purge
+	if !purge {
+		fmt.Print("Remove config, keychain entries, and PATH export? [y/N]: ")
+		reader := bufio.NewReader(os.Stdin)
+		response, _ := reader.ReadString('\n')
+		response = strings.TrimSpace(strings.ToLower(response))
+		removeData = response == "y" || response == "yes"
+	}
+
+	if removeData {
+		_ = helpers.RemoveKeychain()
+		_ = helpers.RemoveConfigDir()
+		_ = helpers.RemovePathExport()
+	}
+
+	fmt.Println("Uninstall complete")
 }
