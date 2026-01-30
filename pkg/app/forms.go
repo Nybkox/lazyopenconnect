@@ -69,6 +69,17 @@ func (a *App) showSettingsForm() (tea.Model, tea.Cmd) {
 	return a, form.Init()
 }
 
+func (a *App) showExportLogsForm() (tea.Model, tea.Cmd) {
+	data := helpers.NewExportFormData()
+	form := helpers.NewExportLogsForm(data, a.formWidth())
+
+	a.State.ActiveForm = form
+	a.State.FormKind = FormExportLogs
+	a.State.FormData = data
+
+	return a, form.Init()
+}
+
 func (a *App) resetSettings() (tea.Model, tea.Cmd) {
 	a.State.ResetPending = false
 
@@ -161,6 +172,18 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		a.State.Config.Settings = *data.ToSettings()
 
 		_ = helpers.SaveConfig(a.State.Config)
+
+	case FormExportLogs:
+		data := a.State.FormData.(*helpers.ExportFormData)
+		if err := helpers.ExportLogs(data.Path, a.State.OutputLines); err != nil {
+			a.State.OutputLines = append(a.State.OutputLines,
+				"\x1b[31m[Export failed: "+err.Error()+"]\x1b[0m")
+		} else {
+			a.State.OutputLines = append(a.State.OutputLines,
+				"\x1b[32m[Logs exported to "+data.Path+"]\x1b[0m")
+		}
+		a.viewport.SetContent(a.renderOutput())
+		a.viewport.GotoBottom()
 	}
 
 	return a, nil

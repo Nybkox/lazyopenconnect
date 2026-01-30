@@ -6,10 +6,25 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 )
 
 func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case key.Matches(msg, a.Keys.Export):
+		return a.showExportLogsForm()
+	case key.Matches(msg, a.Keys.CopyLogs):
+		if err := helpers.CopyLogsToClipboard(a.State.OutputLines); err != nil {
+			a.State.OutputLines = append(a.State.OutputLines,
+				"\x1b[31m[Copy failed: "+err.Error()+"]\x1b[0m")
+		} else {
+			a.State.OutputLines = append(a.State.OutputLines,
+				"\x1b[32m[Logs copied to clipboard]\x1b[0m")
+		}
+		a.viewport.SetContent(a.renderOutput())
+		a.viewport.GotoBottom()
+		return a, nil
 	case key.Matches(msg, a.Keys.ScrollUp):
 		a.viewport.LineUp(1)
 	case key.Matches(msg, a.Keys.ScrollDown):

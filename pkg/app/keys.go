@@ -33,6 +33,9 @@ type KeyMap struct {
 	Reset key.Binding
 
 	Cancel key.Binding
+
+	Export   key.Binding
+	CopyLogs key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -67,5 +70,8 @@ func DefaultKeyMap() KeyMap {
 		Reset: key.NewBinding(key.WithKeys("r")),
 
 		Cancel: key.NewBinding(key.WithKeys("esc")),
+
+		Export:   key.NewBinding(key.WithKeys("E")),
+		CopyLogs: key.NewBinding(key.WithKeys("C")),
 	}
 }

@@ -39,6 +39,7 @@ const (
 	FormEditConn
 	FormSettings
 	FormDeleteConfirm
+	FormExportLogs
 )
 
 type State struct {

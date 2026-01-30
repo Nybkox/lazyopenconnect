@@ -205,3 +205,25 @@ func NewDeleteConfirmForm(name string, data *DeleteConfirmData, width int) *huh.
 		),
 	).WithShowHelp(true).WithTheme(formTheme()).WithWidth(width)
 }
+
+type ExportFormData struct {
+	Path string
+}
+
+func NewExportFormData() *ExportFormData {
+	return &ExportFormData{
+		Path: DefaultExportPath(),
+	}
+}
+
+func NewExportLogsForm(data *ExportFormData, width int) *huh.Form {
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Export Path").
+				Prompt("> ").
+				Value(&data.Path).
+				Description("Path to save the log file"),
+		).Title("Export Logs").Description(" "),
+	).WithShowHelp(true).WithTheme(formTheme()).WithWidth(width)
+}

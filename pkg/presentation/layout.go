@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/app"
+	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 )
 
@@ -276,7 +277,7 @@ func renderStatusBar(state *app.State, width int) string {
 				help = "[enter] edit settings  [r][r] reset defaults"
 			}
 		case app.PaneOutput:
-			help = "[j/k] scroll  [ctrl+d/u] page  [g/G] top/bottom"
+			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy"
 		case app.PaneInput:
 			if state.Status == app.StatusConnected || state.Status == app.StatusExternal || state.Status == app.StatusReconnecting {
 				help = "[enter] submit  [ctrl+d] disconnect  [ctrl+c] quit"
@@ -311,32 +312,11 @@ func dimContent(content string, height int) string {
 
 	var result []string
 	for _, line := range lines {
-		plain := stripAnsi(line)
+		plain := helpers.StripANSI(line)
 		result = append(result, DimStyle.Render(plain))
 	}
 
 	return strings.Join(result, "\n")
-}
-
-func stripAnsi(s string) string {
-	var result strings.Builder
-	inEscape := false
-
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\x1b' {
-			inEscape = true
-			continue
-		}
-		if inEscape {
-			if (s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z') {
-				inEscape = false
-			}
-			continue
-		}
-		result.WriteByte(s[i])
-	}
-
-	return result.String()
 }
 
 func compositeOverlay(base, overlay string, width, height int) string {
@@ -359,7 +339,7 @@ func compositeOverlay(base, overlay string, width, height int) string {
 			break
 		}
 
-		basePlain := stripAnsi(baseLines[baseY])
+		basePlain := helpers.StripANSI(baseLines[baseY])
 		baseRunes := []rune(basePlain)
 
 		for len(baseRunes) < width {
