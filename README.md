@@ -39,7 +39,12 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/install.sh | bash
 ```
 
-Installs the latest release binary to `/usr/local/bin`.
+Installs to `~/.local/bin` (no sudo required). Prompts to add to PATH if needed.
+
+```bash
+# Install system-wide (requires sudo)
+sudo curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/install.sh | bash -s -- --system
+```
 
 ### Homebrew
 
@@ -62,7 +67,8 @@ Download the latest release from [GitHub Releases](https://github.com/Nybkox/laz
 ```bash
 # Extract and install
 tar -xzf lazyopenconnect_*.tar.gz
-sudo mv lazyopenconnect /usr/local/bin/
+mkdir -p ~/.local/bin
+mv lazyopenconnect ~/.local/bin/
 ```
 
 ### From Source
@@ -71,7 +77,8 @@ sudo mv lazyopenconnect /usr/local/bin/
 git clone https://github.com/Nybkox/lazyopenconnect.git
 cd lazyopenconnect
 go build -o lazyopenconnect
-sudo mv lazyopenconnect /usr/local/bin/
+mkdir -p ~/.local/bin
+mv lazyopenconnect ~/.local/bin/
 ```
 
 ### Requirements
