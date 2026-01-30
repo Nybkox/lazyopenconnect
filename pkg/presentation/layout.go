@@ -266,9 +266,9 @@ func renderStatusBar(state *app.State, width int) string {
 			}
 		case app.PaneConnections:
 			if state.Status == app.StatusExternal {
-				help = "[j/k] nav  [g/G] top/end  [d] disconnect  [n] new  [e] edit  [x] del"
+				help = "[j/k] nav  [g/G] top/end  [d] disconnect  [n] new  [e] edit  [x] del [c] cleanup"
 			} else {
-				help = "[j/k] nav  [g/G] top/end  [enter] connect  [d] disc  [n] new  [e] edit  [x] del"
+				help = "[j/k] nav  [g/G] top/end  [enter] connect  [d] disc  [n] new  [e] edit  [x] del [c] cleanup"
 			}
 		case app.PaneSettings:
 			if state.ResetPending {
