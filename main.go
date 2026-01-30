@@ -169,6 +169,7 @@ func handleUninstall() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+	_ = helpers.RemoveAlias()
 
 	if keepConfig {
 		fmt.Println("Uninstall complete (config preserved)")

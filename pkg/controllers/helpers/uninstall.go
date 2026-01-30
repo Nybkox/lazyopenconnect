@@ -30,6 +30,29 @@ func RemoveBinary() error {
 	return nil
 }
 
+func RemoveAlias() error {
+	binaryPath := GetInstallPath()
+	if binaryPath == "" {
+		return nil
+	}
+
+	aliasPath := filepath.Join(filepath.Dir(binaryPath), "lzcon")
+
+	if _, err := os.Stat(aliasPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	if err := os.Remove(aliasPath); err != nil {
+		if os.IsPermission(err) {
+			return nil
+		}
+		return err
+	}
+
+	fmt.Printf("Removed alias %s\n", aliasPath)
+	return nil
+}
+
 func RemoveKeychain() error {
 	cfg, err := LoadConfig()
 	if err != nil {

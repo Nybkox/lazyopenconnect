@@ -39,7 +39,7 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/install.sh | bash
 ```
 
-Installs to `~/.local/bin` (no sudo required). Prompts to add to PATH if needed.
+Installs to `~/.local/bin` (no sudo required). Creates `lzcon` alias. Prompts to add to PATH if needed.
 
 ```bash
 # Install system-wide (requires sudo)
@@ -105,6 +105,9 @@ sudo dnf install openconnect
 ```bash
 # Run (requires root)
 sudo lazyopenconnect
+
+# Or use the short alias
+sudo lzcon
 ```
 
 ## Uninstall
