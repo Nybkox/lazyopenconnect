@@ -1,4 +1,4 @@
-# CLAUDE.md - Agent Instructions for openconnect-tui
+# CLAUDE.md - Agent Instructions for lazyopenconnect
 
 ## Project Overview
 
@@ -12,10 +12,10 @@ Go TUI application for managing OpenConnect VPN connections. Built with Bubble T
 
 ```bash
 # Build
-go build -o openconnect-tui
+go build -o lazyopenconnect
 
 # Run (requires root)
-sudo ./openconnect-tui
+sudo ./lazyopenconnect
 
 # Run directly
 sudo go run main.go

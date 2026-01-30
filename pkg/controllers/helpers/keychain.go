@@ -2,7 +2,7 @@ package helpers
 
 import "github.com/zalando/go-keyring"
 
-const serviceName = "openconnect-tui"
+const serviceName = "lazyopenconnect"
 
 func GetPassword(connectionID string) (string, error) {
 	return keyring.Get(serviceName, connectionID)

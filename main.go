@@ -13,8 +13,8 @@ import (
 
 func main() {
 	if os.Geteuid() != 0 {
-		fmt.Fprintln(os.Stderr, "Requires root. Run: sudo openconnect-tui")
-		os.Exit(1)
+			fmt.Fprintln(os.Stderr, "Requires root. Run: sudo lazyopenconnect")
+			os.Exit(1)
 	}
 
 	cfg, err := helpers.LoadConfig()
