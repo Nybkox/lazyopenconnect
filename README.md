@@ -7,7 +7,7 @@ A TUI for managing OpenConnect VPN connections. Built with [Bubble Tea](https://
 ## Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/install.sh | bash
 ```
 
 ## Why?
@@ -36,7 +36,7 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 ### Quick Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/install.sh | bash
 ```
 
 Installs the latest release binary to `/usr/local/bin`.
@@ -52,12 +52,12 @@ brew install lazyopenconnect
 
 Download the latest release from [GitHub Releases](https://github.com/Nybkox/lazyopenconnect/releases):
 
-| Platform | Architecture | Download |
-|----------|--------------|----------|
-| macOS    | Intel        | `lazyopenconnect_*_darwin_amd64.tar.gz` |
-| macOS    | Apple Silicon| `lazyopenconnect_*_darwin_arm64.tar.gz` |
-| Linux    | x86_64       | `lazyopenconnect_*_linux_amd64.tar.gz` |
-| Linux    | ARM64        | `lazyopenconnect_*_linux_arm64.tar.gz` |
+| Platform | Architecture  | Download                                |
+| -------- | ------------- | --------------------------------------- |
+| macOS    | Intel         | `lazyopenconnect_*_darwin_amd64.tar.gz` |
+| macOS    | Apple Silicon | `lazyopenconnect_*_darwin_arm64.tar.gz` |
+| Linux    | x86_64        | `lazyopenconnect_*_linux_amd64.tar.gz`  |
+| Linux    | ARM64         | `lazyopenconnect_*_linux_arm64.tar.gz`  |
 
 ```bash
 # Extract and install
