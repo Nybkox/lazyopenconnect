@@ -66,6 +66,12 @@ func StartVPN(conn *models.Connection, password string) tea.Cmd {
 			return VPNErrorMsg(err)
 		}
 
+		// Disable PTY echo to prevent passwords from being echoed back
+		_, err = term.MakeRaw(int(ptmx.Fd()))
+		if err != nil {
+			return VPNErrorMsg(err)
+		}
+
 		pid := cmd.Process.Pid
 
 		go streamPTYOutput(ptmx)
