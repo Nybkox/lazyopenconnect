@@ -21,7 +21,7 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X main.version={{.Version}}
+      - -X main.buildVersion={{.Version}}
       - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
 
@@ -88,5 +88,15 @@ brews:
     license: "MIT"
     install: |
       bin.install "lazyopenconnect"
+    post_install: |
+      config_dir = "#{Dir.home}/.config/lazyopenconnect"
+      system "mkdir", "-p", config_dir
+      marker = "#{config_dir}/.installed-by"
+      File.write(marker, <<~EOS)
+        method=homebrew
+        path=#{bin}/lazyopenconnect
+        version=#{version}
+        date=#{Time.now.strftime('%Y-%m-%d')}
+      EOS
     test: |
       system "#{bin}/lazyopenconnect", "--version"

@@ -83,6 +83,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resetTimeoutMsg:
 		return a.handleResetTimeout()
 
+	case UpdateCheckMsg:
+		return a.handleUpdateCheck(msg)
+
+	case UpdatePerformedMsg:
+		return a.handleUpdatePerformed(msg)
+
 	case tea.KeyMsg:
 		return a.handleKeyMsg(msg)
 	}

@@ -1,12 +1,13 @@
 package models
 
 type Settings struct {
-	DNS             string `json:"dns"`
-	Reconnect       bool   `json:"reconnect"`
-	AutoCleanup     bool   `json:"autoCleanup"`
-	WifiInterface   string `json:"wifiInterface"`
-	NetInterface    string `json:"netInterface"`
-	TunnelInterface string `json:"tunnelInterface"`
+	DNS               string `json:"dns"`
+	Reconnect         bool   `json:"reconnect"`
+	AutoCleanup       bool   `json:"autoCleanup"`
+	WifiInterface     string `json:"wifiInterface"`
+	NetInterface      string `json:"netInterface"`
+	TunnelInterface   string `json:"tunnelInterface"`
+	SkipVersionUpdate string `json:"skipVersionUpdate"`
 }
 
 func (s *Settings) GetWifiInterface() string {

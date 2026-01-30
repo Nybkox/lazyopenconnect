@@ -260,7 +260,7 @@ type RenderFunc func(state *State, spinnerFrame int) string
 
 1. Define in `pkg/controllers/helpers/vpn.go` or `pkg/app/messages.go`
 2. Add case in `pkg/app/update.go` `Update()` switch
-3. Create handler method `handle*()` 
+3. Create handler method `handle*()`
 
 ### Adding a new pane
 
@@ -268,3 +268,7 @@ type RenderFunc func(state *State, spinnerFrame int) string
 2. Add key binding in `pkg/app/keys.go`
 3. Add render function in `pkg/presentation/layout.go`
 4. Add update handler in `pkg/app/handlers_pane.go`
+
+## RULES
+
+- Do not write comments if not absolutely necessary

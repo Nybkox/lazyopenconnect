@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
+	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
 func (a *App) formWidth() int {
@@ -184,7 +186,63 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		}
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
+
+	case FormUpdateNotice:
+		return a.handleUpdateFormComplete()
 	}
 
 	return a, nil
+}
+
+type UpdateNoticeData struct {
+	Action string
+}
+
+func NewUpdateNoticeForm(newVersion string, data *UpdateNoticeData, isHomebrew bool) *huh.Form {
+	if isHomebrew {
+		return huh.NewForm(
+			huh.NewGroup(
+				huh.NewNote().
+					Title("Update Available").
+					Description(fmt.Sprintf(
+						"A new version is available!\n\n"+
+							"  Current: v%s\n"+
+							"  Latest:  v%s\n\n"+
+							"Installed via Homebrew. Run:\n"+
+							"  brew upgrade lazyopenconnect",
+						version.Current, newVersion,
+					)),
+
+				huh.NewSelect[string]().
+					Key("action").
+					Options(
+						huh.NewOption("OK", "later"),
+						huh.NewOption("Skip This Version", "skip"),
+					).
+					Value(&data.Action),
+			),
+		).WithShowHelp(true).WithTheme(huh.ThemeCharm()).WithWidth(50)
+	}
+
+	return huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Update Available").
+				Description(fmt.Sprintf(
+					"A new version is available!\n\n"+
+						"  Current: v%s\n"+
+						"  Latest:  v%s",
+					version.Current, newVersion,
+				)),
+
+			huh.NewSelect[string]().
+				Key("action").
+				Options(
+					huh.NewOption("Update Now", "update"),
+					huh.NewOption("Remind Me Later", "later"),
+					huh.NewOption("Skip This Version", "skip"),
+				).
+				Value(&data.Action),
+		),
+	).WithShowHelp(true).WithTheme(huh.ThemeCharm()).WithWidth(50)
 }

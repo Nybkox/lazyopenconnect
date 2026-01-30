@@ -38,6 +38,7 @@ func (a *App) Init() tea.Cmd {
 		textinput.Blink,
 		helpers.CheckExternalVPN(),
 		a.scheduleExternalCheck(),
+		CheckForUpdates(),
 	)
 }
 

@@ -54,3 +54,13 @@ func (a *App) scheduleExternalCheck() tea.Cmd {
 		return externalCheckTickMsg{}
 	})
 }
+
+type UpdateCheckMsg struct {
+	Available bool
+	Version   string
+	Error     error
+}
+
+type UpdatePerformedMsg struct {
+	Error error
+}

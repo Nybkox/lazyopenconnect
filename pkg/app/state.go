@@ -39,6 +39,7 @@ const (
 	FormSettings
 	FormDeleteConfirm
 	FormExportLogs
+	FormUpdateNotice
 )
 
 type State struct {
@@ -73,6 +74,10 @@ type State struct {
 	FormData   any
 
 	ResetPending bool
+
+	// Update notification
+	UpdateAvailable bool
+	UpdateVersion   string
 }
 
 func NewState(cfg *models.Config) *State {
