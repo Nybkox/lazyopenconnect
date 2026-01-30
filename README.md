@@ -4,6 +4,12 @@ A TUI for managing OpenConnect VPN connections. Built with [Bubble Tea](https://
 ![Go Version](https://img.shields.io/badge/go-1.25.4-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+## Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/main/install.sh | bash
+```
+
 ## Why?
 
 FortiClient sucks. Sometimes it won't connect. Sometimes it won't reconnect. And the free version? Refuses to remember your password like it has trust issues.
@@ -27,7 +33,39 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 
 ## Installation
 
-### From source
+### Quick Install (Recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/main/install.sh | bash
+```
+
+Installs the latest release binary to `/usr/local/bin`.
+
+### Homebrew
+
+```bash
+brew tap nybkox/tap
+brew install lazyopenconnect
+```
+
+### Download Binary
+
+Download the latest release from [GitHub Releases](https://github.com/Nybkox/lazyopenconnect/releases):
+
+| Platform | Architecture | Download |
+|----------|--------------|----------|
+| macOS    | Intel        | `lazyopenconnect_*_darwin_amd64.tar.gz` |
+| macOS    | Apple Silicon| `lazyopenconnect_*_darwin_arm64.tar.gz` |
+| Linux    | x86_64       | `lazyopenconnect_*_linux_amd64.tar.gz` |
+| Linux    | ARM64        | `lazyopenconnect_*_linux_arm64.tar.gz` |
+
+```bash
+# Extract and install
+tar -xzf lazyopenconnect_*.tar.gz
+sudo mv lazyopenconnect /usr/local/bin/
+```
+
+### From Source
 
 ```bash
 git clone https://github.com/Nybkox/lazyopenconnect.git

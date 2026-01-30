@@ -1,2 +1,5 @@
 lazyopenconnect
 openconnect-tui
+
+# GoReleaser
+dist/

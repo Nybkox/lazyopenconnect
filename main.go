@@ -13,7 +13,19 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/presentation"
 )
 
+// Set via ldflags at build time
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Printf("lazyopenconnect %s (commit: %s, built: %s)\n", version, commit, date)
+		return
+	}
+
 	if os.Geteuid() != 0 {
 		exe, err := os.Executable()
 		if err != nil {
