@@ -2,7 +2,6 @@ package app
 
 import (
 	"io"
-	"time"
 
 	"github.com/charmbracelet/huh"
 
@@ -51,7 +50,6 @@ type State struct {
 	IP               string
 	PID              int
 	Stdin            io.WriteCloser
-	LastOutputTime   time.Time
 	IsPasswordPrompt bool
 	ExternalHost     string
 

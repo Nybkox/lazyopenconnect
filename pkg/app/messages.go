@@ -14,16 +14,13 @@ func spinnerTick() tea.Cmd {
 	})
 }
 
-type connectionTimeoutMsg struct {
-	at time.Time
-}
+type connectionTimeoutMsg struct{}
 
-const connectionTimeout = 10 * time.Second
+const connectionTimeout = 30 * time.Second
 
-func (a *App) scheduleConnectionTimeout() tea.Cmd {
-	at := a.State.LastOutputTime
+func scheduleConnectionTimeout() tea.Cmd {
 	return tea.Tick(connectionTimeout, func(time.Time) tea.Msg {
-		return connectionTimeoutMsg{at: at}
+		return connectionTimeoutMsg{}
 	})
 }
 

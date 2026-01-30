@@ -31,6 +31,7 @@ func (a *App) connect() (tea.Model, tea.Cmd) {
 	return a, tea.Batch(
 		helpers.StartVPN(conn, password),
 		spinnerTick(),
+		scheduleConnectionTimeout(),
 	)
 }
 
@@ -102,11 +103,12 @@ func (a *App) attemptReconnect() (tea.Model, tea.Cmd) {
 	return a, tea.Batch(
 		helpers.StartVPN(conn, password),
 		spinnerTick(),
+		scheduleConnectionTimeout(),
 	)
 }
 
 func (a *App) reconnectFailed() (tea.Model, tea.Cmd) {
-	a.State.Status = StatusDisconnected
+	a.State.Status = StatusQuitting
 	a.State.ActiveConnID = ""
 	a.State.ReconnectConnID = ""
 	a.State.ReconnectAttempts = 0
@@ -114,7 +116,7 @@ func (a *App) reconnectFailed() (tea.Model, tea.Cmd) {
 	a.State.IP = ""
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		"\x1b[31mAll reconnect attempts failed. Running cleanup...\x1b[0m")
+		"\x1b[31mAll reconnect attempts failed. Exiting...\x1b[0m")
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
@@ -161,6 +163,7 @@ func (a *App) startReconnect() (tea.Model, tea.Cmd) {
 	return a, tea.Batch(
 		helpers.StartVPN(conn, password),
 		spinnerTick(),
+		scheduleConnectionTimeout(),
 	)
 }
 

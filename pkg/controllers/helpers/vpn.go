@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"golang.org/x/term"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -45,6 +46,17 @@ type (
 var (
 	ipPattern  = regexp.MustCompile(`Configured as (\d+\.\d+\.\d+\.\d+)`)
 	pidPattern = regexp.MustCompile(`pid (\d+)`)
+
+	// Patterns indicating successful VPN connection (lowercase for case-insensitive matching)
+	connectedPatterns = []string{
+		"continuing in background",
+		"configured as",
+		"established dtls connection",
+		"dtls established",
+		"ssl established",
+		"tunnel is up",
+		"session authentication will expire",
+	}
 )
 
 type VPNProcess struct {
@@ -227,15 +239,14 @@ func checkLineForEvents(line string) {
 		pid, _ = strconv.Atoi(match[1])
 	}
 
-	if strings.Contains(line, "Continuing in background") ||
-		(strings.Contains(line, "Configured as") && ip != "") ||
-		strings.Contains(line, "DTLS established") ||
-		strings.Contains(line, "SSL established") ||
-		strings.Contains(line, "Tunnel is up") {
-
-		select {
-		case ConnectedChan <- VPNConnectedMsg{IP: ip, PID: pid}:
-		default:
+	lineLower := strings.ToLower(line)
+	for _, pattern := range connectedPatterns {
+		if strings.Contains(lineLower, pattern) {
+			select {
+			case ConnectedChan <- VPNConnectedMsg{IP: ip, PID: pid}:
+			default:
+			}
+			break
 		}
 	}
 }

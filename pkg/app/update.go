@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -138,15 +137,9 @@ func (a *App) handleVPNStdinReady(msg helpers.VPNStdinReady) (tea.Model, tea.Cmd
 func (a *App) handleVPNLog(msg helpers.VPNLogMsg) (tea.Model, tea.Cmd) {
 	line := string(msg)
 	a.State.OutputLines = append(a.State.OutputLines, line)
-	a.State.LastOutputTime = time.Now()
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
-
-	cmds := []tea.Cmd{helpers.WaitForLog()}
-	if a.State.Status == StatusConnecting {
-		cmds = append(cmds, a.scheduleConnectionTimeout())
-	}
-	return a, tea.Batch(cmds...)
+	return a, helpers.WaitForLog()
 }
 
 func (a *App) handleVPNPrompt(msg helpers.VPNPromptMsg) (tea.Model, tea.Cmd) {
@@ -174,17 +167,42 @@ func (a *App) handleVPNConnected(msg helpers.VPNConnectedMsg) (tea.Model, tea.Cm
 	return a, nil
 }
 
-func (a *App) handleConnectionTimeout(msg connectionTimeoutMsg) (tea.Model, tea.Cmd) {
-	// Only mark connected if still connecting and this timeout matches our last output time
-	if a.State.Status == StatusConnecting && msg.at.Equal(a.State.LastOutputTime) {
-		a.State.Status = StatusConnected
-		a.State.ReconnectAttempts = 0 // Reset on successful connect
-		a.State.ReconnectConnID = ""
-		a.State.OutputLines = append(a.State.OutputLines, "\x1b[33m[Timeout: assuming connected]\x1b[0m")
-		a.viewport.SetContent(a.renderOutput())
-		a.viewport.GotoBottom()
+func (a *App) handleConnectionTimeout(connectionTimeoutMsg) (tea.Model, tea.Cmd) {
+	// Ignore if not connecting (already connected or disconnected)
+	if a.State.Status != StatusConnecting {
+		return a, nil
 	}
-	return a, nil
+
+	// Timeout with no success pattern = failure
+	a.State.OutputLines = append(a.State.OutputLines,
+		"\x1b[31m[Connection timeout - no success indicator received]\x1b[0m")
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoBottom()
+
+	if a.State.Stdin != nil {
+		a.State.Stdin.Close()
+	}
+
+	// Reconnect if setting enabled
+	if a.State.Config.Settings.Reconnect && a.State.ActiveConnID != "" {
+		// Check max attempts before trying again
+		if a.State.ReconnectAttempts >= maxReconnectAttempts {
+			return a.reconnectFailed()
+		}
+		a.State.Status = StatusReconnecting
+		a.State.ReconnectConnID = a.State.ActiveConnID
+		return a.attemptReconnect()
+	}
+
+	// Otherwise just disconnect and cleanup
+	a.State.Status = StatusDisconnected
+	a.State.ActiveConnID = ""
+	a.State.IP = ""
+	a.State.PID = 0
+	return a, tea.Batch(
+		helpers.RunCleanup(&a.State.Config.Settings),
+		helpers.WaitForCleanupStep(),
+	)
 }
 
 func (a *App) handleReconnectTick() (tea.Model, tea.Cmd) {
