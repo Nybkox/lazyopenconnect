@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -13,8 +15,22 @@ import (
 
 func main() {
 	if os.Geteuid() != 0 {
+		exe, err := os.Executable()
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "Requires root. Run: sudo lazyopenconnect")
 			os.Exit(1)
+		}
+		sudoPath, err := exec.LookPath("sudo")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Requires root. Run: sudo lazyopenconnect")
+			os.Exit(1)
+		}
+		fmt.Println("lazyopenconnect requres sudo to run openconnect...")
+		args := append([]string{"sudo", exe}, os.Args[1:]...)
+		if err := syscall.Exec(sudoPath, args, os.Environ()); err != nil {
+			fmt.Fprintln(os.Stderr, "Requires root. Run: sudo lazyopenconnect")
+			os.Exit(1)
+		}
 	}
 
 	cfg, err := helpers.LoadConfig()
