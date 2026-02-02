@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
@@ -122,8 +121,6 @@ func Run(debug bool) error {
 	if err := d.killOldDaemon(); err != nil {
 		d.logger.Warn("failed to kill old daemon", "err", err)
 	}
-
-	exec.Command("pkill", "-9", "openconnect").Run()
 
 	if err := d.writePID(); err != nil {
 		return fmt.Errorf("failed to write PID file: %w", err)

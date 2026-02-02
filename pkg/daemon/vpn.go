@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -339,15 +341,26 @@ func (d *Daemon) handleDisconnect() {
 
 func (d *Daemon) disconnectVPN() {
 	d.logger.Info("disconnecting vpn")
-	d.addLog("\x1b[36m$ pkill -x openconnect\x1b[0m")
-	exec.Command("pkill", "-x", "openconnect").Run()
 
 	d.vpnMu.Lock()
-	if d.vpnProcess != nil && d.vpnProcess.ptmx != nil {
-		d.vpnProcess.ptmx.Close()
-	}
+	proc := d.vpnProcess
 	d.vpnProcess = nil
 	d.vpnMu.Unlock()
+
+	if proc != nil && proc.cmd != nil && proc.cmd.Process != nil {
+		pid := proc.cmd.Process.Pid
+		d.addLog(fmt.Sprintf("\x1b[36m$ kill %d\x1b[0m", pid))
+		proc.cmd.Process.Signal(syscall.SIGTERM)
+
+		go func() {
+			time.Sleep(3 * time.Second)
+			proc.cmd.Process.Kill()
+		}()
+
+		if proc.ptmx != nil {
+			proc.ptmx.Close()
+		}
+	}
 
 	d.stateMu.Lock()
 	d.state.Status = StatusDisconnected
