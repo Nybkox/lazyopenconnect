@@ -20,10 +20,7 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
-const (
-	MaxLogLines = 1000
-	appName     = "lazyopenconnect"
-)
+const MaxLogLines = 1000
 
 type ConnStatus int
 
