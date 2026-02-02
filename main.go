@@ -173,8 +173,13 @@ func main() {
 }
 
 func daemonRunning(socketPath string) bool {
-	_, err := os.Stat(socketPath)
-	return err == nil
+	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
+	if err != nil {
+		os.Remove(socketPath)
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 func spawnDaemon() error {
