@@ -226,10 +226,16 @@ func GetPassword(connectionID string) (string, error) {
 
 The application uses a client-daemon architecture:
 
+**Daemon Lifecycle:**
+- Client auto-detects running daemon on startup (via socket file)
+- Spawns daemon automatically if not running
+- **Version mismatch handling**: If client and daemon versions differ, daemon auto-shuts down (see `handleHello()`) so client can spawn a matching version
+- Daemon survives client disconnects; use `lazyopenconnect daemon stop` to kill it
+
 **Logging:**
-- Daemon logs to `~/.config/lazyopenconnect/daemon.log` (configured in `setupLogging()`)
-- Uses standard `log` package with timestamps
-- Log file is appended, not rotated (manual cleanup may be needed)
+- Daemon logs to `~/.config/lazyopenconnect/daemon.log` (internal daemon events)
+- VPN output logs to `~/.config/lazyopenconnect/vpn.log` (connection output)
+- Both use append mode; no automatic rotation
 
 1. **Daemon** (`pkg/daemon/`) runs as a background process, owns the VPN connection
 2. **Client** (`pkg/app/`) is the TUI that connects to the daemon via Unix socket
@@ -257,6 +263,24 @@ d.state.PID             // openconnect process ID
 a.State.Status           // Synced from daemon 'state' messages
 a.State.OutputLines      // Log buffer from daemon
 ```
+
+### Log Handling (Paginated/Lazy Loading)
+
+VPN logs are stored in `~/.config/lazyopenconnect/vpn.log` (not in daemon memory). The TUI fetches log ranges on-demand:
+
+```go
+// Client requests log range
+GetLogsCmd{Type: "get_logs", From: 0, To: 1000}
+
+// Daemon responds with lines
+LogRangeMsg{Type: "log_range", From: 0, Lines: [...], TotalLines: 5000}
+```
+
+**Windowing strategy:**
+- `MaxLoadedLines = 1000` - Max lines held in TUI memory at once
+- As user scrolls, `shouldFetchLogs()` checks if viewport exceeds loaded range
+- Fetches new centered window around current scroll position
+- Prevents memory bloat on long-running connections
 
 ### Daemon Protocol
 
