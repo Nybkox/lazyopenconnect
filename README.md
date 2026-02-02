@@ -23,6 +23,8 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 - **Secure password storage** - Passwords stored in system keychain (macOS Keychain, Linux Secret Service, Windows Credential Manager)
 - **Auto-reconnect** - Automatically reconnect when connection drops (configurable)
 - **External VPN detection** - Detects and displays OpenConnect processes started outside the TUI
+- **Detach/attach support** - Close the TUI while keeping VPN connected (`q` to detach, `Q` to quit)
+- **Daemon architecture** - VPN runs in a background daemon, TUI connects via Unix socket
 - **Interactive prompts** - Handle 2FA, OTP, and other authentication prompts directly in the TUI
 - **Network cleanup** - One-key cleanup of routes, DNS, and interfaces after disconnect
 - **Vim-style navigation** - `j/k` for movement, `g/G` for top/bottom, `ctrl+d/u` for page scroll
@@ -108,6 +110,11 @@ sudo lazyopenconnect
 
 # Or use the short alias
 sudo lzcon
+
+# Daemon commands
+lazyopenconnect daemon status  # Check if daemon is running
+lazyopenconnect daemon start   # Start daemon manually
+lazyopenconnect daemon stop    # Stop daemon and disconnect VPN
 ```
 
 ## Uninstall
@@ -169,17 +176,19 @@ All protocols supported by OpenConnect:
 
 ## Architecture
 
-Follows an **App-State-Helpers** architecture built on Bubble Tea's Elm-style pattern:
+Follows a **Client-Daemon** architecture built on Bubble Tea's Elm-style pattern:
 
-**1. App (`pkg/app/`)** - Central orchestrator implementing Bubble Tea's `Model` interface. `update.go` routes messages to grouped handlers (`handlers_*.go`) for VPN events, pane navigation, input, and forms.
+**1. Daemon (`pkg/daemon/`)** - Background process that manages the VPN connection lifecycle. Runs continuously even when the TUI is closed. Handles PTY I/O, prompt detection, connection state, and network cleanup. Communicates with clients via Unix domain socket using a JSON protocol.
 
-**2. State (`pkg/app/state.go`)** - Single source of truth. Connection status enum (Disconnected → Connecting → Prompting → Connected), pane focus, form state, output buffer, scroll positions. No state lives elsewhere.
+**2. App (`pkg/app/`)** - TUI client implementing Bubble Tea's `Model` interface. Connects to the daemon on startup, sends commands (connect, disconnect, input), and displays state updates. Multiple clients can connect; the last one takes control.
 
-**3. Helpers (`pkg/controllers/helpers/`)** - Business logic decoupled from UI. `vpn.go` spawns processes with PTY, streams output via channels, detects prompts. `config.go` persists JSON. `keychain.go` wraps system credential storage.
+**3. State (`pkg/app/state.go`)** - Client-side view of daemon state. Connection status, pane focus, form state, output buffer. The daemon is the source of truth; the client syncs via messages.
 
-**4. Models (`pkg/models/`)** - Pure data structs with JSON tags. `Connection` (profile), `Settings` (preferences), `Config` (root).
+**4. Helpers (`pkg/controllers/helpers/`)** - Business logic decoupled from UI. `config.go` persists JSON. `keychain.go` wraps system credential storage. Cleanup commands for network interface restoration.
 
-**5. Presentation (`pkg/presentation/`)** - Pure render functions: State in → styled string out. Multi-pane layout, scrollbars, form overlays. No business logic.
+**5. Models (`pkg/models/`)** - Pure data structs with JSON tags. `Connection` (profile), `Settings` (preferences), `Config` (root). Shared between client and daemon.
+
+**6. Presentation (`pkg/presentation/`)** - Pure render functions: State in → styled string out. Multi-pane layout, scrollbars, form overlays. No business logic.
 
 ## Tech Stack
 
@@ -190,11 +199,50 @@ Follows an **App-State-Helpers** architecture built on Bubble Tea's Elm-style pa
 - [go-keyring](https://github.com/zalando/go-keyring) - Cross-platform keychain
 - [creack/pty](https://github.com/creack/pty) - PTY for process I/O
 
+## Key Bindings
+
+| Key | Action |
+|-----|--------|
+| `q` | **Detach** - Close TUI, keep VPN running |
+| `Q` / `Ctrl+C` | **Quit** - Disconnect VPN and exit |
+| `Enter` | Connect to selected connection |
+| `d` | Disconnect current connection |
+| `c` | Run network cleanup |
+| `n` | Add new connection |
+| `e` | Edit selected connection |
+| `D` | Delete connection |
+| `1-4` | Focus pane (status, connections, settings, output) |
+| `Tab` / `Shift+Tab` | Cycle focus |
+| `j/k` or `↑/↓` | Navigate |
+| `g/G` | Top/bottom |
+| `Ctrl+d/u` | Page scroll |
+
 ## Troubleshooting
 
 ### "Requires root" error
 
 OpenConnect needs root privileges to create network interfaces. Always run with `sudo`.
+
+### "Daemon version mismatch" error
+
+The client and daemon must run the same version. Stop the daemon to let the client spawn a new one:
+
+```bash
+lazyopenconnect daemon stop
+sudo lazyopenconnect
+```
+
+### Debugging with daemon logs
+
+The daemon writes logs to `~/.config/lazyopenconnect/daemon.log`. Useful for debugging connection issues:
+
+```bash
+# Follow logs in real-time
+tail -f ~/.config/lazyopenconnect/daemon.log
+
+# View recent logs
+cat ~/.config/lazyopenconnect/daemon.log
+```
 
 ### Network issues after disconnect
 
