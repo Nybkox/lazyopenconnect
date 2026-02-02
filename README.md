@@ -25,6 +25,8 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 - **External VPN detection** - Detects and displays OpenConnect processes started outside the TUI
 - **Detach/attach support** - Close the TUI while keeping VPN connected (`q` to detach, `Q` to quit)
 - **Daemon architecture** - VPN runs in a background daemon, TUI connects via Unix socket
+- **Automatic daemon management** - Daemon auto-restarts on version mismatch, auto-starts with client
+- **Efficient log handling** - VPN logs stored in file with lazy loading (paginated fetch as you scroll)
 - **Interactive prompts** - Handle 2FA, OTP, and other authentication prompts directly in the TUI
 - **Network cleanup** - One-key cleanup of routes, DNS, and interfaces after disconnect
 - **Vim-style navigation** - `j/k` for movement, `g/G` for top/bottom, `ctrl+d/u` for page scroll
@@ -242,6 +244,15 @@ tail -f ~/.config/lazyopenconnect/daemon.log
 
 # View recent logs
 cat ~/.config/lazyopenconnect/daemon.log
+```
+
+### VPN log file
+
+VPN connection output is stored in `~/.config/lazyopenconnect/vpn.log` (not in memory). The TUI uses lazy loading to fetch log ranges as you scroll, keeping memory usage constant even for long-running connections:
+
+```bash
+# View full VPN session log
+cat ~/.config/lazyopenconnect/vpn.log
 ```
 
 ### Network issues after disconnect
