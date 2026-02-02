@@ -56,25 +56,30 @@ go test -cover ./...
 
 ```
 .
-├── main.go                          # Entry point, initializes App
+├── main.go                          # Entry point, routes to daemon or client
 ├── pkg/
-│   ├── app/                         # Bubble Tea application
+│   ├── app/                         # TUI client (Bubble Tea application)
 │   │   ├── app.go                   # App struct, Init(), View()
-│   │   ├── state.go                 # State struct, status enums
+│   │   ├── state.go                 # Client-side view of daemon state
 │   │   ├── update.go                # Update() message routing
 │   │   ├── keys.go                  # KeyMap definitions
 │   │   ├── messages.go              # Custom tea.Msg types
 │   │   ├── forms.go                 # Form handling logic
+│   │   ├── daemon_client.go         # Daemon connection client
 │   │   ├── handlers_*.go            # Handlers by concern
-│   ├── models/                      # Data structures
+│   ├── daemon/                      # Background daemon (NEW)
+│   │   ├── daemon.go                # Core daemon, socket handling
+│   │   ├── vpn.go                   # VPN process management (PTY, I/O)
+│   │   └── protocol.go              # JSON message protocol
+│   ├── models/                      # Data structures (shared)
 │   │   ├── config.go                # Config struct
 │   │   ├── connection.go            # Connection struct
 │   │   ├── settings.go              # Settings struct
 │   ├── controllers/helpers/         # Business logic
-│   │   ├── vpn.go                   # VPN process management
+│   │   ├── vpn.go                   # Cleanup commands (legacy)
 │   │   ├── config.go                # Config file I/O
 │   │   ├── keychain.go              # Password storage
-│   │   ├── forms.go                 # Form data structs
+│   │   └── forms.go                 # Form data structs
 │   └── presentation/                # UI rendering
 │       ├── layout.go                # Render functions
 │       └── styles.go                # Lipgloss styles
@@ -213,31 +218,72 @@ func GetPassword(connectionID string) (string, error) {
 - **lipgloss**: Terminal styling
 - **huh**: Form handling
 - **go-keyring**: System keychain access
-- **creack/pty**: PTY for VPN process
+- **creack/pty**: PTY for VPN process (now in daemon)
 
 ## Architecture Notes
 
+### Client-Daemon Model
+
+The application uses a client-daemon architecture:
+
+**Logging:**
+- Daemon logs to `~/.config/lazyopenconnect/daemon.log` (configured in `setupLogging()`)
+- Uses standard `log` package with timestamps
+- Log file is appended, not rotated (manual cleanup may be needed)
+
+1. **Daemon** (`pkg/daemon/`) runs as a background process, owns the VPN connection
+2. **Client** (`pkg/app/`) is the TUI that connects to the daemon via Unix socket
+3. **Protocol** - JSON messages over Unix domain socket (`~/.config/lazyopenconnect/daemon.sock`)
+
+**Message flow:**
+```
+TUI Client → Daemon → openconnect process
+     ↑         ↓
+   updates   events (logs, prompts, state changes)
+```
+
 ### State Management
 
-All state in `pkg/app/state.go`. Access via `a.State.*`:
+The **daemon** is the source of truth for connection state. The client maintains a cached view:
 
 ```go
-a.State.Status           // Connection status enum
-a.State.Config           // Loaded config with connections
-a.State.FocusedPane      // Current UI focus
-a.State.OutputLines      // VPN output log
+// Daemon state (pkg/daemon/daemon.go)
+d.state.Status           // Disconnected, Connecting, Prompting, Connected
+d.state.ActiveConnID     // Currently active connection
+d.state.IP              // Assigned VPN IP
+d.state.PID             // openconnect process ID
+
+// Client state (pkg/app/state.go) - mirrors daemon
+a.State.Status           // Synced from daemon 'state' messages
+a.State.OutputLines      // Log buffer from daemon
 ```
 
-### Async Communication
+### Daemon Protocol
 
-VPN output streams via channels in `pkg/controllers/helpers/vpn.go`:
+JSON messages over Unix socket (`pkg/daemon/protocol.go`):
 
+**Client → Daemon:**
 ```go
-var LogChan = make(chan string, 100)
-var PromptChan = make(chan VPNPromptMsg, 10)
+HelloCmd{Type: "hello", Version: "..."}
+ConnectCmd{Type: "connect", ConnID: "...", Password: "..."}
+DisconnectCmd{Type: "disconnect"}
+InputCmd{Type: "input", Value: "..."}
+ConfigUpdateCmd{Type: "config_update", Config: {...}}
+GetStateCmd{Type: "get_state"}
+ShutdownCmd{Type: "shutdown"}
 ```
 
-Consumed via commands like `helpers.WaitForLog()`.
+**Daemon → Client:**
+```go
+HelloResponse{Type: "hello_response", Version: "...", Compatible: true}
+StateMsg{Type: "state", Status: ..., ActiveConnID: ..., IP: ..., PID: ...}
+LogMsg{Type: "log", Line: "..."}
+PromptMsg{Type: "prompt", IsPassword: true}
+ConnectedMsg{Type: "connected", IP: "...", PID: ...}
+DisconnectedMsg{Type: "disconnected"}
+ErrorMsg{Type: "error", Code: "...", Message: "..."}
+KickedMsg{Type: "kicked"}  // Another client connected
+```
 
 ### Presentation Layer
 
@@ -258,9 +304,10 @@ type RenderFunc func(state *State, spinnerFrame int) string
 
 ### Adding a new message type
 
-1. Define in `pkg/controllers/helpers/vpn.go` or `pkg/app/messages.go`
-2. Add case in `pkg/app/update.go` `Update()` switch
-3. Create handler method `handle*()`
+1. Define message struct in `pkg/daemon/protocol.go` (if daemon-related)
+2. Add handler in `pkg/daemon/daemon.go` `handleMessage()` switch
+3. Add handler in `pkg/app/update.go` `handleDaemonMsg()` switch
+4. Create handler method `handle*()` in appropriate file
 
 ### Adding a new pane
 
