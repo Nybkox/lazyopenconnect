@@ -3,7 +3,7 @@ package daemon
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -56,6 +56,8 @@ type Daemon struct {
 	socketPath string
 	pidPath    string
 	logFile    *os.File
+	logger     *slog.Logger
+	debug      bool
 }
 
 func SocketPath() (string, error) {
@@ -82,7 +84,7 @@ func logPath() (string, error) {
 	return filepath.Join(dir, "daemon.log"), nil
 }
 
-func New() (*Daemon, error) {
+func New(debug bool) (*Daemon, error) {
 	socketPath, err := SocketPath()
 	if err != nil {
 		return nil, err
@@ -103,11 +105,12 @@ func New() (*Daemon, error) {
 		shutdown:   make(chan struct{}),
 		socketPath: socketPath,
 		pidPath:    pidFile,
+		debug:      debug,
 	}, nil
 }
 
-func Run() error {
-	d, err := New()
+func Run(debug bool) error {
+	d, err := New(debug)
 	if err != nil {
 		return err
 	}
@@ -117,10 +120,10 @@ func Run() error {
 	}
 	defer d.closeLogging()
 
-	log.Println("Daemon starting...")
+	d.logger.Info("daemon starting")
 
 	if err := d.killOldDaemon(); err != nil {
-		log.Printf("Warning: failed to kill old daemon: %v", err)
+		d.logger.Warn("failed to kill old daemon", "err", err)
 	}
 
 	exec.Command("pkill", "-9", "openconnect").Run()
@@ -135,19 +138,19 @@ func Run() error {
 	}
 	defer d.Close()
 
-	log.Printf("Daemon listening on %s (PID %d, version %s)", d.socketPath, os.Getpid(), d.version)
+	d.logger.Info("daemon listening", "socket", d.socketPath, "pid", os.Getpid(), "version", d.version)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 
 	go func() {
 		sig := <-sigChan
-		log.Printf("Received signal %v, shutting down...", sig)
+		d.logger.Info("signal received, shutting down", "signal", sig)
 		d.Shutdown()
 	}()
 
 	d.acceptLoop()
-	log.Println("Daemon stopped")
+	d.logger.Info("daemon stopped")
 	return nil
 }
 
@@ -167,8 +170,14 @@ func (d *Daemon) setupLogging() error {
 	}
 
 	d.logFile = f
-	log.SetOutput(f)
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
+	level := slog.LevelInfo
+	if d.debug {
+		level = slog.LevelDebug
+	}
+
+	handler := slog.NewTextHandler(f, &slog.HandlerOptions{Level: level})
+	d.logger = slog.New(handler)
 	return nil
 }
 
@@ -197,18 +206,18 @@ func (d *Daemon) killOldDaemon() error {
 		return nil
 	}
 
-	log.Printf("Killing old daemon (PID %d)", pid)
+	d.logger.Info("killing old daemon", "pid", pid)
 	process.Signal(syscall.SIGTERM)
 
 	for i := 0; i < 20; i++ {
 		if _, err := os.Stat(d.socketPath); os.IsNotExist(err) {
-			log.Printf("Old daemon terminated, socket released")
+			d.logger.Debug("old daemon terminated, socket released")
 			return nil
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	log.Printf("Old daemon didn't release socket, sending SIGKILL")
+	d.logger.Warn("old daemon didn't release socket, sending SIGKILL")
 	process.Signal(syscall.SIGKILL)
 	time.Sleep(100 * time.Millisecond)
 
@@ -251,11 +260,11 @@ func (d *Daemon) acceptLoop() {
 			case <-d.shutdown:
 				return
 			default:
-				log.Printf("Accept error: %v", err)
+				d.logger.Error("accept failed", "err", err)
 				continue
 			}
 		}
-		log.Printf("New client connected from %v", conn.RemoteAddr())
+		d.logger.Info("client connected", "addr", conn.RemoteAddr())
 		d.handleNewClient(conn)
 	}
 }
@@ -263,7 +272,7 @@ func (d *Daemon) acceptLoop() {
 func (d *Daemon) handleNewClient(conn net.Conn) {
 	d.clientMu.Lock()
 	if d.client != nil {
-		log.Println("Kicking previous client")
+		d.logger.Info("kicking previous client")
 		WriteMsg(d.client, KickedMsg{Type: "kicked"})
 		d.client.Close()
 	}
@@ -279,7 +288,7 @@ func (d *Daemon) readLoop(conn net.Conn) {
 	for {
 		msg, err := ReadMsg(reader)
 		if err != nil {
-			log.Printf("Read error: %v", err)
+			d.logger.Debug("read error", "err", err)
 			d.clientMu.Lock()
 			if d.client == conn {
 				d.client.Close()
@@ -291,7 +300,7 @@ func (d *Daemon) readLoop(conn net.Conn) {
 
 		d.clientMu.Lock()
 		if d.client != conn {
-			log.Println("Connection superseded, exiting readLoop")
+			d.logger.Debug("connection superseded, exiting readLoop")
 			d.clientMu.Unlock()
 			return
 		}
@@ -303,7 +312,7 @@ func (d *Daemon) readLoop(conn net.Conn) {
 
 func (d *Daemon) handleMessage(msg map[string]any) {
 	msgType, _ := msg["type"].(string)
-	log.Printf("Received message: %s", msgType)
+	d.logger.Debug("message received", "type", msgType)
 
 	switch msgType {
 	case "hello":
@@ -321,7 +330,7 @@ func (d *Daemon) handleMessage(msg map[string]any) {
 	case "shutdown":
 		d.Shutdown()
 	default:
-		log.Printf("Unknown message type: %s", msgType)
+		d.logger.Warn("unknown message type", "type", msgType)
 	}
 }
 
@@ -329,7 +338,7 @@ func (d *Daemon) handleHello(msg map[string]any) {
 	clientVersion, _ := msg["version"].(string)
 	compatible := clientVersion == d.version
 
-	log.Printf("Hello from client (version %s, compatible: %v)", clientVersion, compatible)
+	d.logger.Info("hello from client", "client_version", clientVersion, "compatible", compatible)
 
 	d.sendToClient(HelloResponse{
 		Type:       "hello_response",
@@ -338,7 +347,7 @@ func (d *Daemon) handleHello(msg map[string]any) {
 	})
 
 	if !compatible {
-		log.Printf("Version mismatch, shutting down daemon so client can spawn new one")
+		d.logger.Warn("version mismatch, shutting down daemon")
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			d.Shutdown()
@@ -356,7 +365,7 @@ func (d *Daemon) handleGetState() {
 	copy(logHistory, d.state.LogBuffer)
 	d.stateMu.RUnlock()
 
-	log.Printf("Sending state: status=%d, connID=%s", status, connID)
+	d.logger.Debug("sending state", "status", status, "conn_id", connID)
 	d.sendToClient(StateMsg{
 		Type:         "state",
 		Status:       int(status),
@@ -370,7 +379,7 @@ func (d *Daemon) handleGetState() {
 func (d *Daemon) handleConfigUpdate(msg map[string]any) {
 	configData, ok := msg["config"].(map[string]any)
 	if !ok {
-		log.Println("Invalid config_update message")
+		d.logger.Warn("invalid config_update message")
 		return
 	}
 
@@ -378,7 +387,7 @@ func (d *Daemon) handleConfigUpdate(msg map[string]any) {
 	d.stateMu.Lock()
 	d.state.Config = cfg
 	d.stateMu.Unlock()
-	log.Printf("Config updated: %d connections", len(cfg.Connections))
+	d.logger.Info("config updated", "connections", len(cfg.Connections))
 }
 
 func parseConfig(data map[string]any) *models.Config {
@@ -433,7 +442,7 @@ func (d *Daemon) sendToClient(msg any) {
 
 	if d.client != nil {
 		if err := WriteMsg(d.client, msg); err != nil {
-			log.Printf("Failed to send message: %v", err)
+			d.logger.Error("failed to send message", "err", err)
 		}
 	}
 }
@@ -455,7 +464,7 @@ func (d *Daemon) clearLogBuffer() {
 }
 
 func (d *Daemon) Shutdown() {
-	log.Println("Shutting down...")
+	d.logger.Info("shutting down")
 	close(d.shutdown)
 
 	d.vpnMu.Lock()

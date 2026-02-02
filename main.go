@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/pflag"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/app"
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
@@ -23,27 +24,44 @@ var (
 	buildVersion = "dev"
 	commit       = "none"
 	date         = "unknown"
+
+	debug       bool
+	showHelp    bool
+	showVersion bool
 )
+
+func init() {
+	pflag.BoolVar(&debug, "debug", false, "Enable debug logging in daemon")
+	pflag.BoolVarP(&showHelp, "help", "h", false, "Show help")
+	pflag.BoolVarP(&showVersion, "version", "v", false, "Show version")
+	pflag.Parse()
+}
 
 func main() {
 	version.Current = buildVersion
 
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "--help", "-h":
-			printHelp()
-			return
-		case "--version", "-v":
-			fmt.Printf("lazyopenconnect %s (commit: %s, built: %s)\n", buildVersion, commit, date)
-			return
-		case "--daemon":
-			if err := daemon.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
-				os.Exit(1)
-			}
-			return
+	if showHelp {
+		printHelp()
+		return
+	}
+
+	if showVersion {
+		fmt.Printf("lazyopenconnect %s (commit: %s, built: %s)\n", buildVersion, commit, date)
+		return
+	}
+
+	args := pflag.Args()
+	if len(args) > 0 {
+		switch args[0] {
 		case "daemon":
-			handleDaemonCmd()
+			if len(args) > 1 && args[1] == "run" {
+				if err := daemon.Run(debug); err != nil {
+					fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
+					os.Exit(1)
+				}
+				return
+			}
+			handleDaemonCmd(args[1:])
 			return
 		case "update":
 			handleUpdate()
@@ -149,7 +167,12 @@ func spawnDaemon() error {
 		return err
 	}
 
-	cmd := exec.Command(exe, "--daemon")
+	args := []string{"daemon", "run"}
+	if debug {
+		args = append(args, "--debug")
+	}
+
+	cmd := exec.Command(exe, args...)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
 	cmd.Stdin = nil
@@ -163,7 +186,7 @@ func spawnDaemon() error {
 }
 
 func printHelp() {
-	help := `lazyopenconnect - TUI for managing OpenConnect VPN connections
+	fmt.Println(`lazyopenconnect - TUI for managing OpenConnect VPN connections
 
 Usage:
   lazyopenconnect [flags]
@@ -176,16 +199,13 @@ Commands:
   update          Check for and install updates
   uninstall       Remove lazyopenconnect
 
-Flags:
-  -v, --version   Show version information
-  -h, --help      Show this help message
-
-Requires sudo to run openconnect.`
-	fmt.Println(help)
+Flags:`)
+	pflag.PrintDefaults()
+	fmt.Println("\nRequires sudo to run openconnect.")
 }
 
-func handleDaemonCmd() {
-	if len(os.Args) < 3 {
+func handleDaemonCmd(args []string) {
+	if len(args) < 1 {
 		fmt.Println("Usage: lazyopenconnect daemon <start|stop|status>")
 		return
 	}
@@ -196,7 +216,7 @@ func handleDaemonCmd() {
 		os.Exit(1)
 	}
 
-	switch os.Args[2] {
+	switch args[0] {
 	case "start":
 		if daemonRunning(socketPath) {
 			fmt.Println("Daemon is already running")

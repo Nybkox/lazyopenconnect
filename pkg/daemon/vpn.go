@@ -41,6 +41,7 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	d.stateMu.Lock()
 	if d.state.Status != StatusDisconnected {
 		d.stateMu.Unlock()
+		d.logger.Warn("connect rejected, already connected", "status", d.state.Status)
 		d.sendToClient(ErrorMsg{
 			Type:    "error",
 			Code:    "already_connected",
@@ -59,6 +60,7 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 
 	if conn == nil {
 		d.stateMu.Unlock()
+		d.logger.Warn("connect rejected, connection not found", "conn_id", connID)
 		d.sendToClient(ErrorMsg{
 			Type:    "error",
 			Code:    "invalid_conn",
@@ -71,6 +73,7 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	d.state.ActiveConnID = connID
 	d.stateMu.Unlock()
 
+	d.logger.Info("connecting", "conn_id", connID, "host", conn.Host, "protocol", conn.Protocol)
 	d.clearLogBuffer()
 
 	go d.startVPN(conn, password)
@@ -81,11 +84,13 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 
 	cmdStr := "openconnect " + strings.Join(args, " ")
 	d.addLog("\x1b[36m$ " + cmdStr + "\x1b[0m")
+	d.logger.Debug("executing openconnect", "args", args)
 
 	cmd := exec.Command("openconnect", args...)
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
+		d.logger.Error("pty start failed", "err", err)
 		d.sendToClient(ErrorMsg{
 			Type:    "error",
 			Code:    "start_failed",
@@ -100,6 +105,7 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 
 	_, err = term.MakeRaw(int(ptmx.Fd()))
 	if err != nil {
+		d.logger.Error("pty make raw failed", "err", err)
 		d.sendToClient(ErrorMsg{
 			Type:    "error",
 			Code:    "pty_failed",
@@ -119,11 +125,15 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 	}
 	d.vpnMu.Unlock()
 
+	pid := cmd.Process.Pid
 	d.stateMu.Lock()
-	d.state.PID = cmd.Process.Pid
+	d.state.PID = pid
 	d.stateMu.Unlock()
 
+	d.logger.Info("vpn process started", "pid", pid)
+
 	if password != "" {
+		d.logger.Debug("sending password to stdin")
 		go func() {
 			time.Sleep(100 * time.Millisecond)
 			ptmx.Write([]byte(password + "\n"))
@@ -244,12 +254,14 @@ func isPasswordPrompt(line string) bool {
 }
 
 func (d *Daemon) sendPrompt(line string) {
+	isPassword := isPasswordPrompt(line)
+	d.logger.Debug("prompt detected", "is_password", isPassword)
 	d.stateMu.Lock()
 	d.state.Status = StatusPrompting
 	d.stateMu.Unlock()
 	d.sendToClient(PromptMsg{
 		Type:       "prompt",
-		IsPassword: isPasswordPrompt(line),
+		IsPassword: isPassword,
 	})
 }
 
@@ -279,6 +291,7 @@ func (d *Daemon) checkLineForEvents(line string) {
 			currentIP := d.state.IP
 			currentPID := d.state.PID
 			d.stateMu.Unlock()
+			d.logger.Info("vpn connected", "ip", currentIP, "pid", currentPID, "pattern", pattern)
 			d.sendToClient(ConnectedMsg{
 				Type: "connected",
 				IP:   currentIP,
@@ -303,9 +316,11 @@ func (d *Daemon) handleVPNExit() {
 	d.state.PID = 0
 	d.stateMu.Unlock()
 
+	d.logger.Info("vpn process exited", "was_connected", wasConnected)
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 
 	if wasConnected && autoCleanup {
+		d.logger.Debug("running auto cleanup")
 		d.runCleanup()
 	}
 }
@@ -323,6 +338,7 @@ func (d *Daemon) handleDisconnect() {
 }
 
 func (d *Daemon) disconnectVPN() {
+	d.logger.Info("disconnecting vpn")
 	d.addLog("\x1b[36m$ pkill -x openconnect\x1b[0m")
 	exec.Command("pkill", "-x", "openconnect").Run()
 
@@ -344,6 +360,7 @@ func (d *Daemon) disconnectVPN() {
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 
 	if autoCleanup {
+		d.logger.Debug("running auto cleanup")
 		d.runCleanup()
 	}
 }
@@ -356,6 +373,7 @@ func (d *Daemon) handleInput(msg map[string]any) {
 	d.vpnMu.Unlock()
 
 	if proc != nil && proc.ptmx != nil {
+		d.logger.Debug("sending input to vpn")
 		proc.ptmx.Write([]byte(value + "\n"))
 		d.stateMu.Lock()
 		d.state.Status = StatusConnecting
@@ -364,6 +382,7 @@ func (d *Daemon) handleInput(msg map[string]any) {
 }
 
 func (d *Daemon) runCleanup() {
+	d.logger.Info("starting cleanup")
 	d.stateMu.RLock()
 	settings := d.state.Config.Settings
 	d.stateMu.RUnlock()
@@ -423,11 +442,14 @@ func (d *Daemon) runCleanup() {
 		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: step.name + "..."})
 		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "\x1b[36m$ " + step.cmd + "\x1b[0m"})
 		if err := step.fn(); err != nil {
+			d.logger.Debug("cleanup step failed", "step", step.name, "err", err)
 			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "  \x1b[31m✗ " + err.Error() + "\x1b[0m"})
 		} else {
+			d.logger.Debug("cleanup step completed", "step", step.name)
 			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "  \x1b[32m✓ Done\x1b[0m"})
 		}
 	}
 
+	d.logger.Info("cleanup completed")
 	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
 }
