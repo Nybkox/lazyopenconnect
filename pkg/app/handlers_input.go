@@ -16,12 +16,10 @@ func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, a.Keys.Export):
 		return a.showExportLogsForm()
 	case key.Matches(msg, a.Keys.CopyLogs):
-		if err := helpers.CopyLogsToClipboard(a.State.OutputLines); err != nil {
-			a.State.OutputLines = append(a.State.OutputLines,
-				"\x1b[31m[Copy failed: "+err.Error()+"]\x1b[0m")
+		if err := helpers.CopyVpnLogToClipboard(); err != nil {
+			a.State.OutputLines = append(a.State.OutputLines, "\x1b[31m[Copy failed: "+err.Error()+"]\x1b[0m")
 		} else {
-			a.State.OutputLines = append(a.State.OutputLines,
-				"\x1b[32m[Logs copied to clipboard]\x1b[0m")
+			a.State.OutputLines = append(a.State.OutputLines, "\x1b[32m[Logs copied to clipboard]\x1b[0m")
 		}
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()

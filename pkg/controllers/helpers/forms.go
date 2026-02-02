@@ -207,12 +207,14 @@ func NewDeleteConfirmForm(name string, data *DeleteConfirmData, width int) *huh.
 }
 
 type ExportFormData struct {
-	Path string
+	Path      string
+	StripANSI bool
 }
 
 func NewExportFormData() *ExportFormData {
 	return &ExportFormData{
-		Path: DefaultExportPath(),
+		Path:      DefaultExportPath(),
+		StripANSI: true,
 	}
 }
 
@@ -224,6 +226,9 @@ func NewExportLogsForm(data *ExportFormData, width int) *huh.Form {
 				Prompt("> ").
 				Value(&data.Path).
 				Description("Path to save the log file"),
+			huh.NewConfirm().
+				Title("Strip ANSI codes").
+				Value(&data.StripANSI),
 		).Title("Export Logs").Description(" "),
 	).WithShowHelp(true).WithTheme(formTheme()).WithWidth(width)
 }

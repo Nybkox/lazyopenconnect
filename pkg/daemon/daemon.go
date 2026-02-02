@@ -322,6 +322,7 @@ func (d *Daemon) handleMessage(msg map[string]any) {
 		d.handleInput(msg)
 	case "config_update":
 		d.handleConfigUpdate(msg)
+
 	case "shutdown":
 		d.Shutdown()
 	default:

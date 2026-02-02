@@ -177,12 +177,10 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 
 	case FormExportLogs:
 		data := a.State.FormData.(*helpers.ExportFormData)
-		if err := helpers.ExportLogs(data.Path, a.State.OutputLines); err != nil {
-			a.State.OutputLines = append(a.State.OutputLines,
-				"\x1b[31m[Export failed: "+err.Error()+"]\x1b[0m")
+		if err := helpers.CopyVpnLogToPath(data.Path, data.StripANSI); err != nil {
+			a.State.OutputLines = append(a.State.OutputLines, "\x1b[31m[Export failed: "+err.Error()+"]\x1b[0m")
 		} else {
-			a.State.OutputLines = append(a.State.OutputLines,
-				"\x1b[32m[Logs exported to "+data.Path+"]\x1b[0m")
+			a.State.OutputLines = append(a.State.OutputLines, "\x1b[32m[Logs exported to "+data.Path+"]\x1b[0m")
 		}
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()

@@ -1,6 +1,8 @@
 package app
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 const MaxLoadedLines = 1000
 

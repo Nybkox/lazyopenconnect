@@ -26,7 +26,10 @@ func (a *App) connect() (tea.Model, tea.Cmd) {
 
 	a.State.Status = StatusConnecting
 	a.State.ActiveConnID = conn.ID
-	a.State.OutputLines = []string{"Connecting to " + conn.Name + "..."}
+	a.State.OutputLines = []string{}
+	a.State.TotalLogLines = 0
+	a.State.LogLoadedFrom = 0
+	a.State.LogLoadedTo = 0
 	a.viewport.SetContent(a.renderOutput())
 
 	a.SendToDaemon(daemon.ConnectCmd{

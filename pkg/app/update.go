@@ -99,6 +99,7 @@ func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
 		return a.handleDaemonCleanupStep(msg.Raw)
 	case "cleanup_done":
 		return a.handleDaemonCleanupDone()
+
 	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)

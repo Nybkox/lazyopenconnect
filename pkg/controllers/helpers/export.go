@@ -62,3 +62,53 @@ func CopyLogsToClipboard(lines []string) error {
 	content := strings.Join(cleaned, "\n")
 	return clipboard.WriteAll(content)
 }
+
+func VpnLogPath() (string, error) {
+	dir, err := GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "vpn.log"), nil
+}
+
+func ReadVpnLog() (string, error) {
+	path, err := VpnLogPath()
+	if err != nil {
+		return "", err
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(data), nil
+}
+
+func CopyVpnLogToPath(destPath string, stripANSI bool) error {
+	content, err := ReadVpnLog()
+	if err != nil {
+		return err
+	}
+
+	if stripANSI {
+		content = StripANSI(content)
+	}
+
+	dir := filepath.Dir(destPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(destPath, []byte(content), 0o644)
+}
+
+func CopyVpnLogToClipboard() error {
+	content, err := ReadVpnLog()
+	if err != nil {
+		return err
+	}
+	return clipboard.WriteAll(StripANSI(content))
+}
