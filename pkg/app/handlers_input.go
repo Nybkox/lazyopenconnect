@@ -27,18 +27,19 @@ func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.viewport.GotoBottom()
 		return a, nil
 	case key.Matches(msg, a.Keys.ScrollUp):
-		a.viewport.LineUp(1)
+		a.viewport.ScrollUp(1)
 	case key.Matches(msg, a.Keys.ScrollDown):
-		a.viewport.LineDown(1)
+		a.viewport.ScrollDown(1)
 	case key.Matches(msg, a.Keys.PageUp):
-		a.viewport.HalfViewUp()
+		a.viewport.HalfPageUp()
 	case key.Matches(msg, a.Keys.PageDown):
-		a.viewport.HalfViewDown()
+		a.viewport.HalfPageDown()
 	case key.Matches(msg, a.Keys.ScrollToTop):
 		a.viewport.GotoTop()
 	case key.Matches(msg, a.Keys.ScrollToBottom):
 		a.viewport.GotoBottom()
 	}
+	a.maybeFetchLogs()
 	return a, nil
 }
 

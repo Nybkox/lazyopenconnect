@@ -58,6 +58,9 @@ type State struct {
 
 	FocusedPane        FocusedPane
 	OutputLines        []string
+	TotalLogLines      int
+	LogLoadedFrom      int
+	LogLoadedTo        int
 	OutputScroll       int
 	ConnectionsScroll  int
 	ConnectionsVisible int

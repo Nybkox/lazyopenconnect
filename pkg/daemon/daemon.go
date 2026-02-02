@@ -19,8 +19,6 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
-const MaxLogLines = 1000
-
 type ConnStatus int
 
 const (
@@ -35,7 +33,7 @@ type DaemonState struct {
 	ActiveConnID string
 	IP           string
 	PID          int
-	LogBuffer    []string
+	LogLineCount int
 	Config       *models.Config
 }
 
@@ -45,8 +43,10 @@ type Daemon struct {
 	clientMu   sync.Mutex
 	stateMu    sync.RWMutex
 	vpnMu      sync.Mutex
+	vpnLogMu   sync.Mutex
 	state      *DaemonState
 	vpnProcess *VPNProcess
+	vpnLogFile *os.File
 	version    string
 	shutdown   chan struct{}
 	socketPath string
@@ -93,9 +93,8 @@ func New(debug bool) (*Daemon, error) {
 
 	return &Daemon{
 		state: &DaemonState{
-			Status:    StatusDisconnected,
-			LogBuffer: make([]string, 0, MaxLogLines),
-			Config:    models.NewConfig(),
+			Status: StatusDisconnected,
+			Config: models.NewConfig(),
 		},
 		version:    version.Current,
 		shutdown:   make(chan struct{}),
@@ -313,6 +312,8 @@ func (d *Daemon) handleMessage(msg map[string]any) {
 		d.handleHello(msg)
 	case "get_state":
 		d.handleGetState()
+	case "get_logs":
+		d.handleGetLogs(msg)
 	case "connect":
 		d.handleConnect(msg)
 	case "disconnect":
@@ -355,18 +356,17 @@ func (d *Daemon) handleGetState() {
 	connID := d.state.ActiveConnID
 	ip := d.state.IP
 	pid := d.state.PID
-	logHistory := make([]string, len(d.state.LogBuffer))
-	copy(logHistory, d.state.LogBuffer)
+	logLineCount := d.state.LogLineCount
 	d.stateMu.RUnlock()
 
 	d.logger.Debug("sending state", "status", status, "conn_id", connID)
 	d.sendToClient(StateMsg{
-		Type:         "state",
-		Status:       int(status),
-		ActiveConnID: connID,
-		IP:           ip,
-		PID:          pid,
-		LogHistory:   logHistory,
+		Type:          "state",
+		Status:        int(status),
+		ActiveConnID:  connID,
+		IP:            ip,
+		PID:           pid,
+		TotalLogLines: logLineCount,
 	})
 }
 
@@ -442,19 +442,123 @@ func (d *Daemon) sendToClient(msg any) {
 }
 
 func (d *Daemon) addLog(line string) {
-	d.stateMu.Lock()
-	d.state.LogBuffer = append(d.state.LogBuffer, line)
-	if len(d.state.LogBuffer) > MaxLogLines {
-		d.state.LogBuffer = d.state.LogBuffer[1:]
+	d.vpnLogMu.Lock()
+	if d.vpnLogFile != nil {
+		d.vpnLogFile.WriteString(line + "\n")
 	}
+	d.vpnLogMu.Unlock()
+
+	d.stateMu.Lock()
+	lineNum := d.state.LogLineCount
+	d.state.LogLineCount++
 	d.stateMu.Unlock()
-	d.sendToClient(LogMsg{Type: "log", Line: line})
+
+	d.sendToClient(LogMsg{Type: "log", Line: line, LineNumber: lineNum})
 }
 
-func (d *Daemon) clearLogBuffer() {
+func vpnLogPath() (string, error) {
+	dir, err := helpers.GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "vpn.log"), nil
+}
+
+func (d *Daemon) openVpnLogFile() error {
+	path, err := vpnLogPath()
+	if err != nil {
+		return err
+	}
+
+	d.vpnLogMu.Lock()
+	defer d.vpnLogMu.Unlock()
+
+	if d.vpnLogFile != nil {
+		d.vpnLogFile.Close()
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	d.vpnLogFile = f
+
 	d.stateMu.Lock()
-	d.state.LogBuffer = d.state.LogBuffer[:0]
+	d.state.LogLineCount = 0
 	d.stateMu.Unlock()
+
+	return nil
+}
+
+func (d *Daemon) closeVpnLogFile() {
+	d.vpnLogMu.Lock()
+	defer d.vpnLogMu.Unlock()
+
+	if d.vpnLogFile != nil {
+		d.vpnLogFile.Close()
+		d.vpnLogFile = nil
+	}
+}
+
+func (d *Daemon) readLogLines(from, to int) []string {
+	path, err := vpnLogPath()
+	if err != nil {
+		return nil
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+
+	for scanner.Scan() {
+		if lineNum >= from && (to < 0 || lineNum < to) {
+			lines = append(lines, scanner.Text())
+		}
+		lineNum++
+		if to >= 0 && lineNum >= to {
+			break
+		}
+	}
+
+	return lines
+}
+
+func (d *Daemon) handleGetLogs(msg map[string]any) {
+	from := 0
+	to := -1
+
+	if f, ok := msg["from"].(float64); ok {
+		from = int(f)
+	}
+	if t, ok := msg["to"].(float64); ok {
+		to = int(t)
+	}
+
+	d.stateMu.RLock()
+	totalLines := d.state.LogLineCount
+	d.stateMu.RUnlock()
+
+	if from < 0 {
+		from = 0
+	}
+	if to > totalLines {
+		to = totalLines
+	}
+
+	lines := d.readLogLines(from, to)
+
+	d.sendToClient(LogRangeMsg{
+		Type:       "log_range",
+		From:       from,
+		Lines:      lines,
+		TotalLines: totalLines,
+	})
 }
 
 func (d *Daemon) Shutdown() {

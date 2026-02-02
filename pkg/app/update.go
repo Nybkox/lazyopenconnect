@@ -83,6 +83,8 @@ func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
 		return a.handleDaemonState(msg.Raw)
 	case "log":
 		return a.handleDaemonLog(msg.Raw)
+	case "log_range":
+		return a.handleLogRange(msg.Raw)
 	case "prompt":
 		return a.handleDaemonPrompt(msg.Raw)
 	case "connected":
@@ -134,26 +136,46 @@ func (a *App) handleDaemonState(msg map[string]any) (tea.Model, tea.Cmd) {
 	if pid, ok := msg["pid"].(float64); ok {
 		a.State.PID = int(pid)
 	}
-	if history, ok := msg["log_history"].([]any); ok {
-		a.State.OutputLines = make([]string, 0, len(history))
-		for _, line := range history {
-			if s, ok := line.(string); ok {
-				a.State.OutputLines = append(a.State.OutputLines, s)
-			}
+	if totalLines, ok := msg["total_log_lines"].(float64); ok {
+		a.State.TotalLogLines = int(totalLines)
+		if a.State.TotalLogLines > 0 {
+			from := max(0, a.State.TotalLogLines-MaxLoadedLines)
+			a.requestLogs(from, a.State.TotalLogLines)
 		}
-		a.viewport.SetContent(a.renderOutput())
-		a.viewport.GotoBottom()
 	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
 func (a *App) handleDaemonLog(msg map[string]any) (tea.Model, tea.Cmd) {
-	if line, ok := msg["line"].(string); ok {
-		a.State.OutputLines = append(a.State.OutputLines, line)
-		a.viewport.SetContent(a.renderOutput())
-		a.viewport.GotoBottom()
+	line, ok := msg["line"].(string)
+	if !ok {
+		return a, WaitForDaemonMsg(a.DaemonReader)
 	}
+
+	lineNum := 0
+	if ln, ok := msg["line_number"].(float64); ok {
+		lineNum = int(ln)
+	}
+
+	a.State.TotalLogLines = lineNum + 1
+
+	if lineNum == a.State.LogLoadedTo {
+		a.State.OutputLines = append(a.State.OutputLines, line)
+		a.State.LogLoadedTo++
+
+		if len(a.State.OutputLines) > MaxLoadedLines {
+			excess := len(a.State.OutputLines) - MaxLoadedLines
+			a.State.OutputLines = a.State.OutputLines[excess:]
+			a.State.LogLoadedFrom += excess
+		}
+
+		a.viewport.SetContent(a.renderOutput())
+		if a.viewport.AtBottom() {
+			a.viewport.GotoBottom()
+		}
+	}
+
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 

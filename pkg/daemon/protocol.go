@@ -47,18 +47,32 @@ type ShutdownCmd struct {
 	Type string `json:"type"`
 }
 
+type GetLogsCmd struct {
+	Type string `json:"type"`
+	From int    `json:"from"`
+	To   int    `json:"to"`
+}
+
 type StateMsg struct {
-	Type         string   `json:"type"`
-	Status       int      `json:"status"`
-	ActiveConnID string   `json:"active_conn_id"`
-	IP           string   `json:"ip"`
-	PID          int      `json:"pid"`
-	LogHistory   []string `json:"log_history,omitempty"`
+	Type          string `json:"type"`
+	Status        int    `json:"status"`
+	ActiveConnID  string `json:"active_conn_id"`
+	IP            string `json:"ip"`
+	PID           int    `json:"pid"`
+	TotalLogLines int    `json:"total_log_lines"`
 }
 
 type LogMsg struct {
-	Type string `json:"type"`
-	Line string `json:"line"`
+	Type       string `json:"type"`
+	Line       string `json:"line"`
+	LineNumber int    `json:"line_number"`
+}
+
+type LogRangeMsg struct {
+	Type       string   `json:"type"`
+	From       int      `json:"from"`
+	Lines      []string `json:"lines"`
+	TotalLines int      `json:"total_lines"`
 }
 
 type PromptMsg struct {

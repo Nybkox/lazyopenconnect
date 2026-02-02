@@ -76,7 +76,9 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	d.stateMu.Unlock()
 
 	d.logger.Info("connecting", "conn_id", connID, "host", conn.Host, "protocol", conn.Protocol)
-	d.clearLogBuffer()
+	if err := d.openVpnLogFile(); err != nil {
+		d.logger.Error("failed to open vpn log file", "err", err)
+	}
 
 	go d.startVPN(conn, password)
 }
