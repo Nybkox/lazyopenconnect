@@ -1,8 +1,12 @@
 # lazyopenconnect
 
 A TUI for managing OpenConnect VPN connections. Built with [Bubble Tea](https://github.com/charmbracelet/bubbletea).
-![Go Version](https://img.shields.io/badge/go-1.25.4-blue)
+
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Go Version](https://img.shields.io/badge/go-1.25.4-blue)
+![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
+![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-not%20supported-red?logo=windows&logoColor=white)
 
 ## Quick Install
 
@@ -12,7 +16,7 @@ curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/insta
 
 ## Why?
 
-FortiClient sucks. Sometimes it won't connect. Sometimes it won't reconnect. And the free version? Refuses to remember your password like it has trust issues.
+FortiClient sucks. Sometimes it won't connect. Sometimes it won't reconnect. And the free version? Refuses to remember your password and auto-reconnect on failures...
 
 Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a janky bash script for a while, but eventually decided this problem deserved a proper solution — a [lazygit](https://github.com/jesseduffield/lazygit)-style TUI that just works.
 
@@ -203,21 +207,21 @@ Follows a **Client-Daemon** architecture built on Bubble Tea's Elm-style pattern
 
 ## Key Bindings
 
-| Key | Action |
-|-----|--------|
-| `q` | **Detach** - Close TUI, keep VPN running |
-| `Q` / `Ctrl+C` | **Quit** - Disconnect VPN and exit |
-| `Enter` | Connect to selected connection |
-| `d` | Disconnect current connection |
-| `c` | Run network cleanup |
-| `n` | Add new connection |
-| `e` | Edit selected connection |
-| `D` | Delete connection |
-| `1-4` | Focus pane (status, connections, settings, output) |
-| `Tab` / `Shift+Tab` | Cycle focus |
-| `j/k` or `↑/↓` | Navigate |
-| `g/G` | Top/bottom |
-| `Ctrl+d/u` | Page scroll |
+| Key                 | Action                                             |
+| ------------------- | -------------------------------------------------- |
+| `q`                 | **Detach** - Close TUI, keep VPN running           |
+| `Q` / `Ctrl+C`      | **Quit** - Disconnect VPN and exit                 |
+| `Enter`             | Connect to selected connection                     |
+| `d`                 | Disconnect current connection                      |
+| `c`                 | Run network cleanup                                |
+| `n`                 | Add new connection                                 |
+| `e`                 | Edit selected connection                           |
+| `D`                 | Delete connection                                  |
+| `1-4`               | Focus pane (status, connections, settings, output) |
+| `Tab` / `Shift+Tab` | Cycle focus                                        |
+| `j/k` or `↑/↓`      | Navigate                                           |
+| `g/G`               | Top/bottom                                         |
+| `Ctrl+d/u`          | Page scroll                                        |
 
 ## Troubleshooting
 
