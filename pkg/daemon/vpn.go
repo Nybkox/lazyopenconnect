@@ -38,7 +38,9 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	connID, _ := msg["conn_id"].(string)
 	password, _ := msg["password"].(string)
 
+	d.stateMu.Lock()
 	if d.state.Status != StatusDisconnected {
+		d.stateMu.Unlock()
 		d.sendToClient(ErrorMsg{
 			Type:    "error",
 			Code:    "already_connected",
@@ -56,6 +58,7 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	}
 
 	if conn == nil {
+		d.stateMu.Unlock()
 		d.sendToClient(ErrorMsg{
 			Type:    "error",
 			Code:    "invalid_conn",
@@ -66,6 +69,8 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 
 	d.state.Status = StatusConnecting
 	d.state.ActiveConnID = connID
+	d.stateMu.Unlock()
+
 	d.clearLogBuffer()
 
 	go d.startVPN(conn, password)
@@ -86,8 +91,10 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 			Code:    "start_failed",
 			Message: err.Error(),
 		})
+		d.stateMu.Lock()
 		d.state.Status = StatusDisconnected
 		d.state.ActiveConnID = ""
+		d.stateMu.Unlock()
 		return
 	}
 
@@ -98,16 +105,23 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 			Code:    "pty_failed",
 			Message: err.Error(),
 		})
+		d.stateMu.Lock()
 		d.state.Status = StatusDisconnected
 		d.state.ActiveConnID = ""
+		d.stateMu.Unlock()
 		return
 	}
 
+	d.vpnMu.Lock()
 	d.vpnProcess = &VPNProcess{
 		cmd:  cmd,
 		ptmx: ptmx,
 	}
+	d.vpnMu.Unlock()
+
+	d.stateMu.Lock()
 	d.state.PID = cmd.Process.Pid
+	d.stateMu.Unlock()
 
 	if password != "" {
 		go func() {
@@ -230,7 +244,9 @@ func isPasswordPrompt(line string) bool {
 }
 
 func (d *Daemon) sendPrompt(line string) {
+	d.stateMu.Lock()
 	d.state.Status = StatusPrompting
+	d.stateMu.Unlock()
 	d.sendToClient(PromptMsg{
 		Type:       "prompt",
 		IsPassword: isPasswordPrompt(line),
@@ -252,6 +268,7 @@ func (d *Daemon) checkLineForEvents(line string) {
 	lineLower := strings.ToLower(line)
 	for _, pattern := range connectedPatterns {
 		if strings.Contains(lineLower, pattern) {
+			d.stateMu.Lock()
 			d.state.Status = StatusConnected
 			if ip != "" {
 				d.state.IP = ip
@@ -259,10 +276,13 @@ func (d *Daemon) checkLineForEvents(line string) {
 			if pid != 0 {
 				d.state.PID = pid
 			}
+			currentIP := d.state.IP
+			currentPID := d.state.PID
+			d.stateMu.Unlock()
 			d.sendToClient(ConnectedMsg{
 				Type: "connected",
-				IP:   d.state.IP,
-				PID:  d.state.PID,
+				IP:   currentIP,
+				PID:  currentPID,
 			})
 			break
 		}
@@ -270,23 +290,32 @@ func (d *Daemon) checkLineForEvents(line string) {
 }
 
 func (d *Daemon) handleVPNExit() {
-	wasConnected := d.state.Status == StatusConnected
-
+	d.vpnMu.Lock()
 	d.vpnProcess = nil
+	d.vpnMu.Unlock()
+
+	d.stateMu.Lock()
+	wasConnected := d.state.Status == StatusConnected
+	autoCleanup := d.state.Config.Settings.AutoCleanup
 	d.state.Status = StatusDisconnected
 	d.state.ActiveConnID = ""
 	d.state.IP = ""
 	d.state.PID = 0
+	d.stateMu.Unlock()
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 
-	if wasConnected && d.state.Config.Settings.AutoCleanup {
+	if wasConnected && autoCleanup {
 		d.runCleanup()
 	}
 }
 
 func (d *Daemon) handleDisconnect() {
-	if d.state.Status == StatusDisconnected {
+	d.stateMu.RLock()
+	status := d.state.Status
+	d.stateMu.RUnlock()
+
+	if status == StatusDisconnected {
 		return
 	}
 
@@ -297,19 +326,24 @@ func (d *Daemon) disconnectVPN() {
 	d.addLog("\x1b[36m$ pkill -x openconnect\x1b[0m")
 	exec.Command("pkill", "-x", "openconnect").Run()
 
+	d.vpnMu.Lock()
 	if d.vpnProcess != nil && d.vpnProcess.ptmx != nil {
 		d.vpnProcess.ptmx.Close()
 	}
-
 	d.vpnProcess = nil
+	d.vpnMu.Unlock()
+
+	d.stateMu.Lock()
 	d.state.Status = StatusDisconnected
 	d.state.ActiveConnID = ""
 	d.state.IP = ""
 	d.state.PID = 0
+	autoCleanup := d.state.Config.Settings.AutoCleanup
+	d.stateMu.Unlock()
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 
-	if d.state.Config.Settings.AutoCleanup {
+	if autoCleanup {
 		d.runCleanup()
 	}
 }
@@ -317,14 +351,23 @@ func (d *Daemon) disconnectVPN() {
 func (d *Daemon) handleInput(msg map[string]any) {
 	value, _ := msg["value"].(string)
 
-	if d.vpnProcess != nil && d.vpnProcess.ptmx != nil {
-		d.vpnProcess.ptmx.Write([]byte(value + "\n"))
+	d.vpnMu.Lock()
+	proc := d.vpnProcess
+	d.vpnMu.Unlock()
+
+	if proc != nil && proc.ptmx != nil {
+		proc.ptmx.Write([]byte(value + "\n"))
+		d.stateMu.Lock()
 		d.state.Status = StatusConnecting
+		d.stateMu.Unlock()
 	}
 }
 
 func (d *Daemon) runCleanup() {
-	settings := &d.state.Config.Settings
+	d.stateMu.RLock()
+	settings := d.state.Config.Settings
+	d.stateMu.RUnlock()
+
 	tunnelIface := settings.GetTunnelInterface()
 	netIface := settings.GetNetInterface()
 	wifiIface := settings.GetWifiInterface()

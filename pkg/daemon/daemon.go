@@ -47,6 +47,8 @@ type Daemon struct {
 	listener   net.Listener
 	client     net.Conn
 	clientMu   sync.Mutex
+	stateMu    sync.RWMutex
+	vpnMu      sync.Mutex
 	state      *DaemonState
 	vpnProcess *VPNProcess
 	version    string
@@ -345,14 +347,23 @@ func (d *Daemon) handleHello(msg map[string]any) {
 }
 
 func (d *Daemon) handleGetState() {
-	log.Printf("Sending state: status=%d, connID=%s", d.state.Status, d.state.ActiveConnID)
+	d.stateMu.RLock()
+	status := d.state.Status
+	connID := d.state.ActiveConnID
+	ip := d.state.IP
+	pid := d.state.PID
+	logHistory := make([]string, len(d.state.LogBuffer))
+	copy(logHistory, d.state.LogBuffer)
+	d.stateMu.RUnlock()
+
+	log.Printf("Sending state: status=%d, connID=%s", status, connID)
 	d.sendToClient(StateMsg{
 		Type:         "state",
-		Status:       int(d.state.Status),
-		ActiveConnID: d.state.ActiveConnID,
-		IP:           d.state.IP,
-		PID:          d.state.PID,
-		LogHistory:   d.state.LogBuffer,
+		Status:       int(status),
+		ActiveConnID: connID,
+		IP:           ip,
+		PID:          pid,
+		LogHistory:   logHistory,
 	})
 }
 
@@ -364,7 +375,9 @@ func (d *Daemon) handleConfigUpdate(msg map[string]any) {
 	}
 
 	cfg := parseConfig(configData)
+	d.stateMu.Lock()
 	d.state.Config = cfg
+	d.stateMu.Unlock()
 	log.Printf("Config updated: %d connections", len(cfg.Connections))
 }
 
@@ -426,23 +439,32 @@ func (d *Daemon) sendToClient(msg any) {
 }
 
 func (d *Daemon) addLog(line string) {
+	d.stateMu.Lock()
 	d.state.LogBuffer = append(d.state.LogBuffer, line)
 	if len(d.state.LogBuffer) > MaxLogLines {
 		d.state.LogBuffer = d.state.LogBuffer[1:]
 	}
+	d.stateMu.Unlock()
 	d.sendToClient(LogMsg{Type: "log", Line: line})
 }
 
 func (d *Daemon) clearLogBuffer() {
+	d.stateMu.Lock()
 	d.state.LogBuffer = d.state.LogBuffer[:0]
+	d.stateMu.Unlock()
 }
 
 func (d *Daemon) Shutdown() {
 	log.Println("Shutting down...")
 	close(d.shutdown)
-	if d.vpnProcess != nil {
+
+	d.vpnMu.Lock()
+	hasVPN := d.vpnProcess != nil
+	d.vpnMu.Unlock()
+	if hasVPN {
 		d.disconnectVPN()
 	}
+
 	if d.listener != nil {
 		d.listener.Close()
 	}
