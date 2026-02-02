@@ -41,8 +41,8 @@ type KeyMap struct {
 
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
-		Quit:       key.NewBinding(key.WithKeys("Q", "ctrl+c")),
-		Detach:     key.NewBinding(key.WithKeys("q")),
+		Quit:       key.NewBinding(key.WithKeys("Q")),
+		Detach:     key.NewBinding(key.WithKeys("q", "ctrl+c")),
 		FocusPane1: key.NewBinding(key.WithKeys("1")),
 		FocusPane2: key.NewBinding(key.WithKeys("2")),
 		FocusPane3: key.NewBinding(key.WithKeys("3")),
