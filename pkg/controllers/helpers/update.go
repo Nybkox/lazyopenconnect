@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/creativeprojects/go-selfupdate"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
+
+func isDevVersion(v string) bool {
+	_, err := semver.NewVersion(v)
+	return err != nil
+}
 
 const repo = "Nybkox/lazyopenconnect"
 
@@ -38,7 +44,7 @@ func CheckForUpdate() (*UpdateInfo, error) {
 		return &UpdateInfo{Available: false, Current: version.Current}, nil
 	}
 
-	if version.Current == "dev" {
+	if isDevVersion(version.Current) {
 		return &UpdateInfo{
 			Available:  true,
 			Current:    version.Current,
@@ -82,7 +88,7 @@ func PerformUpdate() error {
 		return fmt.Errorf("no release found")
 	}
 
-	if version.Current != "dev" && latest.LessOrEqual(version.Current) {
+	if !isDevVersion(version.Current) && latest.LessOrEqual(version.Current) {
 		return fmt.Errorf("already up to date (%s)", version.Current)
 	}
 
