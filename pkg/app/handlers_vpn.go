@@ -78,15 +78,8 @@ func (a *App) cleanup() (tea.Model, tea.Cmd) {
 func (a *App) attemptReconnect() (tea.Model, tea.Cmd) {
 	a.State.ReconnectAttempts++
 
-	var connID string
-	for i := range a.State.Config.Connections {
-		if a.State.Config.Connections[i].ID == a.State.ReconnectConnID {
-			connID = a.State.Config.Connections[i].ID
-			break
-		}
-	}
-
-	if connID == "" {
+	conn := a.State.FindConnectionByID(a.State.ReconnectConnID)
+	if conn == nil {
 		a.State.OutputLines = append(a.State.OutputLines,
 			"\x1b[31mReconnect failed: connection not found\x1b[0m")
 		return a.reconnectFailed()
@@ -99,18 +92,15 @@ func (a *App) attemptReconnect() (tea.Model, tea.Cmd) {
 	a.viewport.GotoBottom()
 
 	var password string
-	for i := range a.State.Config.Connections {
-		if a.State.Config.Connections[i].ID == connID && a.State.Config.Connections[i].HasPassword {
-			password, _ = helpers.GetPassword(connID)
-			break
-		}
+	if conn.HasPassword {
+		password, _ = helpers.GetPassword(conn.ID)
 	}
 
 	a.State.Status = StatusConnecting
 
 	a.SendToDaemon(daemon.ConnectCmd{
 		Type:     "connect",
-		ConnID:   connID,
+		ConnID:   conn.ID,
 		Password: password,
 	})
 
@@ -137,19 +127,11 @@ func (a *App) reconnectFailed() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) startReconnect() (tea.Model, tea.Cmd) {
-	connID := a.State.ReconnectConnID
+	conn := a.State.FindConnectionByID(a.State.ReconnectConnID)
 	a.State.ReconnectConnID = ""
 	a.State.ReconnectCountdown = 0
 
-	var found bool
-	for i := range a.State.Config.Connections {
-		if a.State.Config.Connections[i].ID == connID {
-			found = true
-			break
-		}
-	}
-
-	if !found {
+	if conn == nil {
 		a.State.OutputLines = append(a.State.OutputLines,
 			"\x1b[31m[Reconnect failed: connection not found]\x1b[0m")
 		a.State.ReconnectAttempts = 0
@@ -159,32 +141,21 @@ func (a *App) startReconnect() (tea.Model, tea.Cmd) {
 	}
 
 	var password string
-	for i := range a.State.Config.Connections {
-		if a.State.Config.Connections[i].ID == connID && a.State.Config.Connections[i].HasPassword {
-			password, _ = helpers.GetPassword(connID)
-			break
-		}
+	if conn.HasPassword {
+		password, _ = helpers.GetPassword(conn.ID)
 	}
 
 	a.State.Status = StatusConnecting
-	a.State.ActiveConnID = connID
-
-	var connName string
-	for i := range a.State.Config.Connections {
-		if a.State.Config.Connections[i].ID == connID {
-			connName = a.State.Config.Connections[i].Name
-			break
-		}
-	}
+	a.State.ActiveConnID = conn.ID
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		fmt.Sprintf("\x1b[33m[Reconnecting to %s...]\x1b[0m", connName))
+		fmt.Sprintf("\x1b[33m[Reconnecting to %s...]\x1b[0m", conn.Name))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
 	a.SendToDaemon(daemon.ConnectCmd{
 		Type:     "connect",
-		ConnID:   connID,
+		ConnID:   conn.ID,
 		Password: password,
 	})
 

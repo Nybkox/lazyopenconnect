@@ -88,16 +88,20 @@ func NewState(cfg *models.Config) *State {
 	}
 }
 
-func (s *State) ActiveConnection() *models.Connection {
-	if s.ActiveConnID == "" {
+func (s *State) FindConnectionByID(id string) *models.Connection {
+	if id == "" {
 		return nil
 	}
 	for i := range s.Config.Connections {
-		if s.Config.Connections[i].ID == s.ActiveConnID {
+		if s.Config.Connections[i].ID == id {
 			return &s.Config.Connections[i]
 		}
 	}
 	return nil
+}
+
+func (s *State) ActiveConnection() *models.Connection {
+	return s.FindConnectionByID(s.ActiveConnID)
 }
 
 func (s *State) SelectedConnection() *models.Connection {
