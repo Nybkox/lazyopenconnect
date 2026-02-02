@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
+	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
 )
 
 func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -54,9 +55,13 @@ func (a *App) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.Matches(msg, a.Keys.Submit) {
-		if a.State.Stdin != nil && a.input.Value() != "" {
+		if a.DaemonConn != nil && a.input.Value() != "" {
 			value := a.input.Value()
-			a.State.Stdin.Write([]byte(value + "\n"))
+
+			a.SendToDaemon(daemon.InputCmd{
+				Type:  "input",
+				Value: value,
+			})
 
 			displayValue := value
 			if a.State.IsPasswordPrompt {
@@ -67,6 +72,7 @@ func (a *App) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.input.SetValue("")
 			a.input.EchoMode = textinput.EchoNormal
 			a.State.IsPasswordPrompt = false
+			a.State.Status = StatusConnecting
 
 			a.viewport.SetContent(a.renderOutput())
 			a.viewport.GotoBottom()

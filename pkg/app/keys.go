@@ -4,6 +4,7 @@ import "github.com/charmbracelet/bubbles/key"
 
 type KeyMap struct {
 	Quit       key.Binding
+	Detach     key.Binding
 	FocusPane1 key.Binding
 	FocusPane2 key.Binding
 	FocusPane3 key.Binding
@@ -40,7 +41,8 @@ type KeyMap struct {
 
 func DefaultKeyMap() KeyMap {
 	return KeyMap{
-		Quit:       key.NewBinding(key.WithKeys("ctrl+c")),
+		Quit:       key.NewBinding(key.WithKeys("Q", "ctrl+c")),
+		Detach:     key.NewBinding(key.WithKeys("q")),
 		FocusPane1: key.NewBinding(key.WithKeys("1")),
 		FocusPane2: key.NewBinding(key.WithKeys("2")),
 		FocusPane3: key.NewBinding(key.WithKeys("3")),

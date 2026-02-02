@@ -264,31 +264,31 @@ func renderStatusBar(state *app.State, width int) string {
 		case app.PaneStatus:
 			switch state.Status {
 			case app.StatusReconnecting:
-				help = "[d] cancel reconnect  [1-5] switch pane  [tab] cycle"
+				help = "[d] cancel reconnect  [q] detach  [Q] quit"
 			case app.StatusExternal, app.StatusConnected:
-				help = "[d] disconnect  [1-5] switch pane  [tab] cycle"
+				help = "[d] disconnect  [q] detach  [Q] quit"
 			default:
-				help = "[1-5] switch pane  [tab] cycle"
+				help = "[1-5] pane  [q] detach  [Q] quit"
 			}
 		case app.PaneConnections:
 			if state.Status == app.StatusExternal {
-				help = "[j/k] nav  [g/G] top/end  [d] disconnect  [n] new  [e] edit  [x] del [c] cleanup"
+				help = "[j/k] nav  [d] disconnect  [n] new  [e] edit  [x] del  [q] detach"
 			} else {
-				help = "[j/k] nav  [g/G] top/end  [enter] connect  [d] disc  [n] new  [e] edit  [x] del [c] cleanup"
+				help = "[j/k] nav  [enter] connect  [n] new  [e] edit  [x] del  [q] detach"
 			}
 		case app.PaneSettings:
 			if state.ResetPending {
 				help = "[r] confirm reset  [any] cancel"
 			} else {
-				help = "[enter] edit settings  [r][r] reset defaults"
+				help = "[enter] edit  [r][r] reset  [q] detach  [Q] quit"
 			}
 		case app.PaneOutput:
-			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy"
+			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy  [q] detach"
 		case app.PaneInput:
 			if state.Status == app.StatusConnected || state.Status == app.StatusExternal || state.Status == app.StatusReconnecting {
-				help = "[enter] submit  [ctrl+d] disconnect  [ctrl+c] quit"
+				help = "[enter] submit  [ctrl+d] disconnect  [q] detach  [Q] quit"
 			} else {
-				help = "[enter] submit  [ctrl+c] quit"
+				help = "[enter] submit  [q] detach  [Q] quit"
 			}
 		}
 	}

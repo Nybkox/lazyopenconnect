@@ -1,11 +1,13 @@
 package app
 
 import (
+	"bufio"
+	"net"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 )
 
@@ -16,6 +18,8 @@ type App struct {
 	State        *State
 	Keys         KeyMap
 	RenderView   RenderFunc
+	DaemonConn   net.Conn
+	DaemonReader *bufio.Reader
 	viewport     viewport.Model
 	input        textinput.Model
 	spinnerFrame int
@@ -34,12 +38,16 @@ func New(cfg *models.Config) *App {
 }
 
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(
+	cmds := []tea.Cmd{
 		textinput.Blink,
-		helpers.CheckExternalVPN(),
-		a.scheduleExternalCheck(),
 		CheckForUpdates(),
-	)
+	}
+
+	if a.DaemonReader != nil {
+		cmds = append(cmds, WaitForDaemonMsg(a.DaemonReader))
+	}
+
+	return tea.Batch(cmds...)
 }
 
 func (a *App) View() string {

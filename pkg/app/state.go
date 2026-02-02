@@ -1,8 +1,6 @@
 package app
 
 import (
-	"io"
-
 	"github.com/charmbracelet/huh"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
@@ -50,7 +48,6 @@ type State struct {
 	Status           ConnStatus
 	IP               string
 	PID              int
-	Stdin            io.WriteCloser
 	IsPasswordPrompt bool
 	ExternalHost     string
 
