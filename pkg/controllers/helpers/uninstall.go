@@ -132,8 +132,8 @@ func RemovePathExport() error {
 
 func detectShellConfig() string {
 	shell := filepath.Base(os.Getenv("SHELL"))
-	homeDir := getHomeDir()
-	if homeDir == "" {
+	homeDir, err := GetHomeDir()
+	if err != nil {
 		return ""
 	}
 
@@ -148,22 +148,4 @@ func detectShellConfig() string {
 	default:
 		return filepath.Join(homeDir, ".profile")
 	}
-}
-
-func getHomeDir() string {
-	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		homeDir := "/home/" + sudoUser
-		if runtime.GOOS == "darwin" {
-			homeDir = "/Users/" + sudoUser
-		}
-		if _, err := os.Stat(homeDir); err == nil {
-			return homeDir
-		}
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return homeDir
 }

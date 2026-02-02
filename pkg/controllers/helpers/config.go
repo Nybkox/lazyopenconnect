@@ -14,23 +14,21 @@ const (
 	configFile = "config.json"
 )
 
-func configDir() (string, error) {
-	var homeDir string
-
+func GetHomeDir() (string, error) {
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
 		u, err := user.Lookup(sudoUser)
-		if err != nil {
-			return "", err
-		}
-		homeDir = u.HomeDir
-	} else {
-		var err error
-		homeDir, err = os.UserHomeDir()
-		if err != nil {
-			return "", err
+		if err == nil {
+			return u.HomeDir, nil
 		}
 	}
+	return os.UserHomeDir()
+}
 
+func configDir() (string, error) {
+	homeDir, err := GetHomeDir()
+	if err != nil {
+		return "", err
+	}
 	return filepath.Join(homeDir, ".config", appName), nil
 }
 

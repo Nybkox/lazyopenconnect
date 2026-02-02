@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
@@ -56,7 +57,7 @@ type Daemon struct {
 }
 
 func SocketPath() (string, error) {
-	dir, err := configDir()
+	dir, err := helpers.GetConfigDir()
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +65,7 @@ func SocketPath() (string, error) {
 }
 
 func pidPath() (string, error) {
-	dir, err := configDir()
+	dir, err := helpers.GetConfigDir()
 	if err != nil {
 		return "", err
 	}
@@ -72,29 +73,11 @@ func pidPath() (string, error) {
 }
 
 func logPath() (string, error) {
-	dir, err := configDir()
+	dir, err := helpers.GetConfigDir()
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(dir, "daemon.log"), nil
-}
-
-func configDir() (string, error) {
-	homeDir, err := getHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(homeDir, ".config", appName), nil
-}
-
-func getHomeDir() (string, error) {
-	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		out, err := exec.Command("sh", "-c", "eval echo ~"+sudoUser).Output()
-		if err == nil && len(out) > 0 {
-			return strings.TrimSpace(string(out)), nil
-		}
-	}
-	return os.UserHomeDir()
 }
 
 func New() (*Daemon, error) {
