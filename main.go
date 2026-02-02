@@ -97,39 +97,55 @@ func main() {
 		os.Exit(1)
 	}
 
-	if !daemonRunning(socketPath) {
-		if err := spawnDaemon(); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
+	var conn net.Conn
+	var reader *bufio.Reader
+
+	for attempt := 0; attempt < 2; attempt++ {
+		if !daemonRunning(socketPath) {
+			if err := spawnDaemon(); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
+				os.Exit(1)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+
+		conn, err = net.Dial("unix", socketPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to connect to daemon: %v\n", err)
 			os.Exit(1)
 		}
-		time.Sleep(200 * time.Millisecond)
-	}
 
-	conn, err := net.Dial("unix", socketPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to connect to daemon: %v\n", err)
+		daemon.WriteMsg(conn, daemon.HelloCmd{
+			Type:    "hello",
+			Version: version.Current,
+		})
+
+		reader = bufio.NewReader(conn)
+		resp, err := daemon.ReadMsg(reader)
+		if err != nil {
+			conn.Close()
+			fmt.Fprintf(os.Stderr, "Failed to read daemon response: %v\n", err)
+			os.Exit(1)
+		}
+
+		if compatible, ok := resp["compatible"].(bool); ok && compatible {
+			break
+		}
+
+		daemonVersion, _ := resp["version"].(string)
+		conn.Close()
+
+		if attempt == 0 {
+			fmt.Fprintf(os.Stderr, "Daemon version mismatch (client: %s, daemon: %s), restarting...\n",
+				version.Current, daemonVersion)
+			time.Sleep(500 * time.Millisecond)
+			continue
+		}
+
+		fmt.Fprintln(os.Stderr, "Failed to restart daemon with matching version")
 		os.Exit(1)
 	}
 	defer conn.Close()
-
-	daemon.WriteMsg(conn, daemon.HelloCmd{
-		Type:    "hello",
-		Version: version.Current,
-	})
-
-	reader := bufio.NewReader(conn)
-	resp, err := daemon.ReadMsg(reader)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read daemon response: %v\n", err)
-		os.Exit(1)
-	}
-
-	if compatible, ok := resp["compatible"].(bool); !ok || !compatible {
-		daemonVersion, _ := resp["version"].(string)
-		fmt.Fprintf(os.Stderr, "Daemon version mismatch (client: %s, daemon: %s)\n", version.Current, daemonVersion)
-		fmt.Fprintln(os.Stderr, "Run: lazyopenconnect daemon stop && lazyopenconnect")
-		os.Exit(1)
-	}
 
 	cfg, err := helpers.LoadConfig()
 	if err != nil {
