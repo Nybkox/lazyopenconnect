@@ -10,6 +10,7 @@ import (
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
@@ -94,7 +95,7 @@ func (a *App) resetSettings() (tea.Model, tea.Cmd) {
 	_ = helpers.SaveConfig(a.State.Config)
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		"\x1b[32m[Settings reset to defaults]\x1b[0m")
+		ui.LogSuccess("[Settings reset to defaults]"))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
@@ -178,9 +179,9 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 	case FormExportLogs:
 		data := a.State.FormData.(*helpers.ExportFormData)
 		if err := helpers.CopyVpnLogToPath(data.Path, data.StripANSI); err != nil {
-			a.State.OutputLines = append(a.State.OutputLines, "\x1b[31m[Export failed: "+err.Error()+"]\x1b[0m")
+			a.State.OutputLines = append(a.State.OutputLines, ui.LogError("[Export failed: "+err.Error()+"]"))
 		} else {
-			a.State.OutputLines = append(a.State.OutputLines, "\x1b[32m[Logs exported to "+data.Path+"]\x1b[0m")
+			a.State.OutputLines = append(a.State.OutputLines, ui.LogSuccess("[Logs exported to "+data.Path+"]"))
 		}
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()

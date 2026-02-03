@@ -1,35 +1,29 @@
 package presentation
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
+)
 
 var (
-	colorPrimary    = lipgloss.Color("212")
-	colorSecondary  = lipgloss.Color("240")
-	colorSuccess    = lipgloss.Color("82")
-	colorWarning    = lipgloss.Color("214")
-	colorDanger     = lipgloss.Color("196")
-	colorMuted      = lipgloss.Color("245")
-	colorDim        = lipgloss.Color("238")
-	colorBackground = lipgloss.Color("235")
-	colorForeground = lipgloss.Color("252")
-
 	borderStyle = lipgloss.RoundedBorder()
 
 	PaneStyle = lipgloss.NewStyle().
 			Border(borderStyle).
-			BorderForeground(colorSecondary)
+			BorderForeground(ui.ColorSecondary)
 
 	PaneFocusedStyle = lipgloss.NewStyle().
 				Border(borderStyle).
-				BorderForeground(colorPrimary)
+				BorderForeground(ui.ColorPrimary)
 
 	TitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorPrimary)
+			Foreground(ui.ColorPrimary)
 
 	StatusBarStyle = lipgloss.NewStyle().
-			Background(colorBackground).
-			Foreground(colorForeground).
+			Background(ui.ColorBackground).
+			Foreground(ui.ColorForeground).
 			Padding(0, 1)
 
 	ConnectionItemStyle = lipgloss.NewStyle().
@@ -38,43 +32,43 @@ var (
 	ConnectionItemSelectedStyle = lipgloss.NewStyle().
 					PaddingLeft(2).
 					Bold(true).
-					Foreground(colorPrimary)
+					Foreground(ui.ColorPrimary)
 
 	ConnectionDetailStyle = lipgloss.NewStyle().
 				PaddingLeft(4).
-				Foreground(colorMuted)
+				Foreground(ui.ColorMuted)
 
-	StatusConnected    = lipgloss.NewStyle().Foreground(colorSuccess).Render("●")
-	StatusConnecting   = lipgloss.NewStyle().Foreground(colorWarning)
-	StatusDisconnected = lipgloss.NewStyle().Foreground(colorMuted).Render(" ")
+	StatusConnected    = lipgloss.NewStyle().Foreground(ui.ColorSuccess).Render("●")
+	StatusConnecting   = lipgloss.NewStyle().Foreground(ui.ColorWarning)
+	StatusDisconnected = lipgloss.NewStyle().Foreground(ui.ColorMuted).Render(" ")
 
 	InputStyle = lipgloss.NewStyle().
 			Border(borderStyle).
-			BorderForeground(colorSecondary).
+			BorderForeground(ui.ColorSecondary).
 			Padding(0, 1)
 
 	InputFocusedStyle = lipgloss.NewStyle().
 				Border(borderStyle).
-				BorderForeground(colorPrimary).
+				BorderForeground(ui.ColorPrimary).
 				Padding(0, 1)
 
-	HelpKeyStyle  = lipgloss.NewStyle().Foreground(colorPrimary)
-	HelpDescStyle = lipgloss.NewStyle().Foreground(colorMuted)
+	HelpKeyStyle  = lipgloss.NewStyle().Foreground(ui.ColorPrimary)
+	HelpDescStyle = lipgloss.NewStyle().Foreground(ui.ColorMuted)
 
-	DimStyle = lipgloss.NewStyle().Foreground(colorDim)
+	DimStyle = lipgloss.NewStyle().Foreground(ui.ColorDim)
 
 	FormOverlayStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorPrimary).
+				BorderForeground(ui.ColorPrimary).
 				Padding(1, 2).
-				Background(colorBackground)
+				Background(ui.ColorBackground)
 
-	ScrollbarTrackStyle = lipgloss.NewStyle().Foreground(colorDim)
-	ScrollbarThumbStyle = lipgloss.NewStyle().Foreground(colorMuted)
+	ScrollbarTrackStyle = lipgloss.NewStyle().Foreground(ui.ColorDim)
+	ScrollbarThumbStyle = lipgloss.NewStyle().Foreground(ui.ColorMuted)
 
-	SuccessStyle = lipgloss.NewStyle().Foreground(colorSuccess)
-	WarningStyle = lipgloss.NewStyle().Foreground(colorWarning)
-	MutedStyle   = lipgloss.NewStyle().Foreground(colorMuted)
+	SuccessStyle = lipgloss.NewStyle().Foreground(ui.ColorSuccess)
+	WarningStyle = lipgloss.NewStyle().Foreground(ui.ColorWarning)
+	MutedStyle   = lipgloss.NewStyle().Foreground(ui.ColorMuted)
 )
 
 var SpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}

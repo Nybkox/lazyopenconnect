@@ -7,6 +7,7 @@ import (
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 func (a *App) connect() (tea.Model, tea.Cmd) {
@@ -84,13 +85,13 @@ func (a *App) attemptReconnect() (tea.Model, tea.Cmd) {
 	conn := a.State.FindConnectionByID(a.State.ReconnectConnID)
 	if conn == nil {
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[31mReconnect failed: connection not found\x1b[0m")
+			ui.LogError("Reconnect failed: connection not found"))
 		return a.reconnectFailed()
 	}
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		fmt.Sprintf("\x1b[33mReconnecting... (attempt %d/%d)\x1b[0m",
-			a.State.ReconnectAttempts, maxReconnectAttempts))
+		ui.LogWarning(fmt.Sprintf("Reconnecting... (attempt %d/%d)",
+			a.State.ReconnectAttempts, maxReconnectAttempts)))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
@@ -119,7 +120,7 @@ func (a *App) reconnectFailed() (tea.Model, tea.Cmd) {
 	a.State.IP = ""
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		"\x1b[31mAll reconnect attempts failed. Exiting...\x1b[0m")
+		ui.LogError("All reconnect attempts failed. Exiting..."))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
@@ -136,7 +137,7 @@ func (a *App) startReconnect() (tea.Model, tea.Cmd) {
 
 	if conn == nil {
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[31m[Reconnect failed: connection not found]\x1b[0m")
+			ui.LogError("[Reconnect failed: connection not found]"))
 		a.State.ReconnectAttempts = 0
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
@@ -152,7 +153,7 @@ func (a *App) startReconnect() (tea.Model, tea.Cmd) {
 	a.State.ActiveConnID = conn.ID
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		fmt.Sprintf("\x1b[33m[Reconnecting to %s...]\x1b[0m", conn.Name))
+		ui.LogWarning(fmt.Sprintf("[Reconnecting to %s...]", conn.Name)))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 

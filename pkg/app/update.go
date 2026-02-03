@@ -9,6 +9,7 @@ import (
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -109,7 +110,7 @@ func (a *App) handleHelloResponse(msg map[string]any) (tea.Model, tea.Cmd) {
 	compatible, _ := msg["compatible"].(bool)
 	if !compatible {
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[31mDaemon version mismatch. Please restart the daemon.\x1b[0m")
+			ui.LogError("Daemon version mismatch. Please restart the daemon."))
 		a.viewport.SetContent(a.renderOutput())
 		return a, tea.Quit
 	}
@@ -242,7 +243,7 @@ func (a *App) handleDaemonError(msg map[string]any) (tea.Model, tea.Cmd) {
 	message, _ := msg["message"].(string)
 
 	a.State.OutputLines = append(a.State.OutputLines,
-		fmt.Sprintf("\x1b[31mError [%s]: %s\x1b[0m", code, message))
+		ui.LogError(fmt.Sprintf("Error [%s]: %s", code, message)))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
@@ -252,7 +253,7 @@ func (a *App) handleDaemonError(msg map[string]any) (tea.Model, tea.Cmd) {
 		}
 		a.State.Status = StatusReconnecting
 		a.State.OutputLines = append(a.State.OutputLines,
-			fmt.Sprintf("\x1b[33mRetrying in %ds...\x1b[0m", int(reconnectDelay.Seconds())))
+			ui.LogWarning(fmt.Sprintf("Retrying in %ds...", int(reconnectDelay.Seconds()))))
 		a.viewport.SetContent(a.renderOutput())
 		return a, tea.Batch(scheduleReconnectTick(), WaitForDaemonMsg(a.DaemonReader))
 	}
@@ -263,7 +264,7 @@ func (a *App) handleDaemonError(msg map[string]any) (tea.Model, tea.Cmd) {
 
 func (a *App) handleKicked() (tea.Model, tea.Cmd) {
 	a.State.OutputLines = append(a.State.OutputLines,
-		"\x1b[33mAnother client connected. Exiting...\x1b[0m")
+		ui.LogWarning("Another client connected. Exiting..."))
 	a.viewport.SetContent(a.renderOutput())
 	return a, tea.Quit
 }
@@ -290,7 +291,7 @@ func (a *App) handleDaemonCleanupDone() (tea.Model, tea.Cmd) {
 
 func (a *App) handleDaemonDisconnected() (tea.Model, tea.Cmd) {
 	a.State.OutputLines = append(a.State.OutputLines,
-		"\x1b[31mLost connection to daemon. Exiting...\x1b[0m")
+		ui.LogError("Lost connection to daemon. Exiting..."))
 	a.viewport.SetContent(a.renderOutput())
 	return a, tea.Quit
 }
@@ -352,7 +353,7 @@ func (a *App) handleResetTimeout() (tea.Model, tea.Cmd) {
 	if a.State.ResetPending {
 		a.State.ResetPending = false
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[33m[Reset cancelled - timeout]\x1b[0m")
+			ui.LogWarning("[Reset cancelled - timeout]"))
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
 	}
@@ -382,7 +383,7 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.State.ReconnectConnID = ""
 		a.State.ReconnectAttempts = 0
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[33m[Reconnect cancelled]\x1b[0m")
+			ui.LogWarning("[Reconnect cancelled]"))
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
 		return a, nil

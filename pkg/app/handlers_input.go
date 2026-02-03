@@ -9,6 +9,7 @@ import (
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -17,9 +18,9 @@ func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a.showExportLogsForm()
 	case key.Matches(msg, a.Keys.CopyLogs):
 		if err := helpers.CopyVpnLogToClipboard(); err != nil {
-			a.State.OutputLines = append(a.State.OutputLines, "\x1b[31m[Copy failed: "+err.Error()+"]\x1b[0m")
+			a.State.OutputLines = append(a.State.OutputLines, ui.LogError("[Copy failed: "+err.Error()+"]"))
 		} else {
-			a.State.OutputLines = append(a.State.OutputLines, "\x1b[32m[Logs copied to clipboard]\x1b[0m")
+			a.State.OutputLines = append(a.State.OutputLines, ui.LogSuccess("[Logs copied to clipboard]"))
 		}
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()

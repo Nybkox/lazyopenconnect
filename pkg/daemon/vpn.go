@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 var (
@@ -87,7 +88,7 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 	args := buildArgs(conn)
 
 	cmdStr := "openconnect " + strings.Join(args, " ")
-	d.addLog("\x1b[36m$ " + cmdStr + "\x1b[0m")
+	d.addLog(ui.LogCommand(cmdStr))
 	d.logger.Debug("executing openconnect", "args", args)
 
 	cmd := exec.Command("openconnect", args...)
@@ -351,7 +352,7 @@ func (d *Daemon) disconnectVPN() {
 
 	if proc != nil && proc.cmd != nil && proc.cmd.Process != nil {
 		pid := proc.cmd.Process.Pid
-		d.addLog(fmt.Sprintf("\x1b[36m$ kill %d\x1b[0m", pid))
+		d.addLog(ui.LogCommand(fmt.Sprintf("kill %d", pid)))
 		proc.cmd.Process.Signal(syscall.SIGTERM)
 
 		go func() {
@@ -455,13 +456,13 @@ func (d *Daemon) runCleanup() {
 
 	for _, step := range steps {
 		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: step.name + "..."})
-		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "\x1b[36m$ " + step.cmd + "\x1b[0m"})
+		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: ui.LogCommand(step.cmd)})
 		if err := step.fn(); err != nil {
 			d.logger.Debug("cleanup step failed", "step", step.name, "err", err)
-			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "  \x1b[31m✗ " + err.Error() + "\x1b[0m"})
+			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: ui.LogFail("✗ " + err.Error())})
 		} else {
 			d.logger.Debug("cleanup step completed", "step", step.name)
-			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "  \x1b[32m✓ Done\x1b[0m"})
+			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: ui.LogOK("✓ Done")})
 		}
 	}
 

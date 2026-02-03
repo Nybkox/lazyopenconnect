@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 type VPNCleanupStepMsg string
@@ -70,11 +71,11 @@ func RunCleanup(settings *models.Settings) tea.Cmd {
 
 		for _, step := range steps {
 			CleanupStepChan <- step.name + "..."
-			CleanupStepChan <- "\x1b[36m$ " + step.cmd + "\x1b[0m"
+			CleanupStepChan <- ui.LogCommand(step.cmd)
 			if err := step.fn(); err != nil {
-				CleanupStepChan <- "  \x1b[31m✗ " + err.Error() + "\x1b[0m"
+				CleanupStepChan <- ui.LogFail("✗ " + err.Error())
 			} else {
-				CleanupStepChan <- "  \x1b[32m✓ Done\x1b[0m"
+				CleanupStepChan <- ui.LogOK("✓ Done")
 			}
 		}
 

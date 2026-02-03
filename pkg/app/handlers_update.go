@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 func (a *App) handleUpdateCheck(msg UpdateCheckMsg) (tea.Model, tea.Cmd) {
@@ -43,7 +44,7 @@ func (a *App) handleUpdateFormComplete() (tea.Model, tea.Cmd) {
 		a.State.FormKind = FormNone
 		a.State.FormData = nil
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[33m[Downloading update...]\x1b[0m")
+			ui.LogWarning("[Downloading update...]"))
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
 		return a, performUpdateCmd()
@@ -63,13 +64,13 @@ func (a *App) handleUpdateFormComplete() (tea.Model, tea.Cmd) {
 func (a *App) handleUpdatePerformed(msg UpdatePerformedMsg) (tea.Model, tea.Cmd) {
 	if msg.Error != nil {
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[31m[Update failed: "+msg.Error.Error()+"]\x1b[0m")
+			ui.LogError("[Update failed: "+msg.Error.Error()+"]"))
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
 		return a, nil
 	}
 
-	fmt.Println("\n\x1b[32mUpdate successful! Please restart lazyopenconnect.\x1b[0m")
+	fmt.Println("\n" + ui.LogSuccess("Update successful! Please restart lazyopenconnect."))
 	return a, tea.Quit
 }
 

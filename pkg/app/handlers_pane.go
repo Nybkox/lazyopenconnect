@@ -3,6 +3,8 @@ package app
 import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 func (a *App) cycleFocus() {
@@ -91,7 +93,7 @@ func (a *App) updateSettings(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		a.State.ResetPending = true
 		a.State.OutputLines = append(a.State.OutputLines,
-			"\x1b[33m[Press r again to reset settings to defaults]\x1b[0m")
+			ui.LogWarning("[Press r again to reset settings to defaults]"))
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
 		return a, scheduleResetTimeout()
