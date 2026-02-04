@@ -26,6 +26,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if key.Matches(keyMsg, a.Keys.Quit) {
 				return a, tea.Quit
 			}
+			if key.Matches(keyMsg, a.Keys.Detach) && a.State.FormKind == FormUpdateNotice {
+				a.State.ActiveForm = nil
+				a.State.FormKind = FormNone
+				a.State.FormData = nil
+				return a, nil
+			}
 		}
 		return a.updateForm(msg)
 	}
