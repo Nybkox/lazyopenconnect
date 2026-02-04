@@ -73,7 +73,9 @@ type State struct {
 	FormKind   FormKind
 	FormData   any
 
-	ResetPending bool
+	ResetPending     bool
+	RestartPending   bool
+	RestartingDaemon bool
 
 	// Update notification
 	UpdateAvailable bool

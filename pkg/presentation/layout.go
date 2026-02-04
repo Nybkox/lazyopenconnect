@@ -262,13 +262,17 @@ func renderStatusBar(state *app.State, width int) string {
 	} else {
 		switch state.FocusedPane {
 		case app.PaneStatus:
+			if state.RestartPending {
+				help = "[R] confirm restart  [any] cancel"
+				break
+			}
 			switch state.Status {
 			case app.StatusReconnecting:
-				help = "[d] cancel reconnect  [q] detach  [Q] quit"
+				help = "[d] cancel reconnect  [R][R] restart daemon  [q] detach  [Q] quit"
 			case app.StatusExternal, app.StatusConnected:
-				help = "[d] disconnect  [q] detach  [Q] quit"
+				help = "[d] disconnect  [R][R] restart daemon  [q] detach  [Q] quit"
 			default:
-				help = "[1-5] pane  [q] detach  [Q] quit"
+				help = "[1-5] pane  [R][R] restart daemon  [q] detach  [Q] quit"
 			}
 		case app.PaneConnections:
 			if state.Status == app.StatusExternal {

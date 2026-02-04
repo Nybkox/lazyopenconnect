@@ -47,6 +47,16 @@ func scheduleResetTimeout() tea.Cmd {
 	})
 }
 
+type restartTimeoutMsg struct{}
+
+const restartConfirmTimeout = 2 * time.Second
+
+func scheduleRestartTimeout() tea.Cmd {
+	return tea.Tick(restartConfirmTimeout, func(time.Time) tea.Msg {
+		return restartTimeoutMsg{}
+	})
+}
+
 type externalCheckTickMsg struct{}
 
 func (a *App) scheduleExternalCheck() tea.Cmd {

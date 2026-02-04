@@ -55,6 +55,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case resetTimeoutMsg:
 		return a.handleResetTimeout()
 
+	case restartTimeoutMsg:
+		return a.handleRestartTimeout()
+
+	case daemonRestartedMsg:
+		return a.handleDaemonRestarted(msg)
+
+	case daemonRestartFailedMsg:
+		return a.handleDaemonRestartFailed(msg)
+
 	case UpdateCheckMsg:
 		return a.handleUpdateCheck(msg)
 
@@ -290,6 +299,9 @@ func (a *App) handleDaemonCleanupDone() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleDaemonDisconnected() (tea.Model, tea.Cmd) {
+	if a.State.RestartingDaemon {
+		return a, nil
+	}
 	a.State.OutputLines = append(a.State.OutputLines,
 		ui.LogError("Lost connection to daemon. Exiting..."))
 	a.viewport.SetContent(a.renderOutput())
@@ -360,6 +372,95 @@ func (a *App) handleResetTimeout() (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+func (a *App) handleRestartTimeout() (tea.Model, tea.Cmd) {
+	if a.State.RestartPending {
+		a.State.RestartPending = false
+		a.State.OutputLines = append(a.State.OutputLines,
+			ui.LogWarning("[Restart cancelled - timeout]"))
+		a.viewport.SetContent(a.renderOutput())
+		a.viewport.GotoBottom()
+	}
+	return a, nil
+}
+
+func (a *App) handleRestartDaemon() (tea.Model, tea.Cmd) {
+	if a.State.RestartingDaemon {
+		return a, nil
+	}
+	if !a.State.RestartPending {
+		a.State.RestartPending = true
+		a.State.OutputLines = append(a.State.OutputLines,
+			ui.LogWarning("[Press R again to restart daemon]"))
+		a.viewport.SetContent(a.renderOutput())
+		a.viewport.GotoBottom()
+		return a, scheduleRestartTimeout()
+	}
+
+	a.State.RestartPending = false
+	a.State.RestartingDaemon = true
+	a.State.ReconnectCountdown = 0
+	a.State.ReconnectConnID = ""
+	a.State.ReconnectAttempts = 0
+	a.State.OutputLines = append(a.State.OutputLines,
+		ui.LogWarning("[Restarting daemon...]"))
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoBottom()
+	return a, a.restartDaemonCmd()
+}
+
+func (a *App) handleDaemonRestarted(msg daemonRestartedMsg) (tea.Model, tea.Cmd) {
+	a.State.RestartingDaemon = false
+	a.State.RestartPending = false
+	a.State.Status = StatusDisconnected
+	a.State.ActiveConnID = ""
+	a.State.IP = ""
+	a.State.PID = 0
+	a.State.ReconnectAttempts = 0
+	a.State.ReconnectCountdown = 0
+	a.State.ReconnectConnID = ""
+	a.State.DisconnectRequested = false
+	a.State.TotalLogLines = 0
+	a.State.LogLoadedFrom = 0
+	a.State.LogLoadedTo = 0
+	a.State.OutputLines = []string{ui.LogWarning("[Daemon restarted]")}
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoBottom()
+
+	a.DaemonConn = msg.Conn
+	a.DaemonReader = msg.Reader
+
+	a.SendToDaemon(daemon.ConfigUpdateCmd{
+		Type:   "config_update",
+		Config: *a.State.Config,
+	})
+	a.SendToDaemon(daemon.GetStateCmd{Type: "get_state"})
+	return a, WaitForDaemonMsg(a.DaemonReader)
+}
+
+func (a *App) handleDaemonRestartFailed(msg daemonRestartFailedMsg) (tea.Model, tea.Cmd) {
+	a.State.RestartingDaemon = false
+	a.State.RestartPending = false
+	a.State.Status = StatusDisconnected
+	a.State.ActiveConnID = ""
+	a.State.IP = ""
+	a.State.PID = 0
+	a.State.ReconnectAttempts = 0
+	a.State.ReconnectCountdown = 0
+	a.State.ReconnectConnID = ""
+	a.State.DisconnectRequested = false
+	a.DaemonConn = nil
+	a.DaemonReader = nil
+	errMsg := "unknown error"
+	if msg.Err != nil {
+		errMsg = msg.Err.Error()
+	}
+	a.State.OutputLines = append(a.State.OutputLines,
+		ui.LogError("[Daemon restart failed: "+errMsg+"]"))
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoBottom()
+	return a, nil
+}
+
 func (a *App) handleDetach() (tea.Model, tea.Cmd) {
 	if a.DaemonConn != nil {
 		a.DaemonConn.Close()
@@ -387,6 +488,10 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
 		return a, nil
+	}
+
+	if a.State.RestartPending && (!key.Matches(msg, a.Keys.RestartDaemon) || a.State.FocusedPane != PaneStatus) {
+		a.State.RestartPending = false
 	}
 
 	switch {
@@ -435,6 +540,9 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch a.State.FocusedPane {
 	case PaneStatus:
+		if key.Matches(msg, a.Keys.RestartDaemon) {
+			return a.handleRestartDaemon()
+		}
 		if key.Matches(msg, a.Keys.Disconnect) {
 			if a.State.Status == StatusExternal || a.State.Status == StatusConnected || a.State.Status == StatusReconnecting {
 				return a.disconnect()

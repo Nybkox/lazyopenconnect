@@ -12,15 +12,16 @@ type KeyMap struct {
 	FocusPane5 key.Binding
 	TabFocus   key.Binding
 
-	Up         key.Binding
-	Down       key.Binding
-	Connect    key.Binding
-	Disconnect key.Binding
-	Cleanup    key.Binding
-	Edit       key.Binding
-	Delete     key.Binding
-	New        key.Binding
-	Settings   key.Binding
+	Up            key.Binding
+	Down          key.Binding
+	Connect       key.Binding
+	Disconnect    key.Binding
+	RestartDaemon key.Binding
+	Cleanup       key.Binding
+	Edit          key.Binding
+	Delete        key.Binding
+	New           key.Binding
+	Settings      key.Binding
 
 	ScrollUp       key.Binding
 	ScrollDown     key.Binding
@@ -50,15 +51,16 @@ func DefaultKeyMap() KeyMap {
 		FocusPane5: key.NewBinding(key.WithKeys("5")),
 		TabFocus:   key.NewBinding(key.WithKeys("tab")),
 
-		Up:         key.NewBinding(key.WithKeys("k", "up")),
-		Down:       key.NewBinding(key.WithKeys("j", "down")),
-		Connect:    key.NewBinding(key.WithKeys("enter")),
-		Disconnect: key.NewBinding(key.WithKeys("d")),
-		Cleanup:    key.NewBinding(key.WithKeys("c")),
-		Edit:       key.NewBinding(key.WithKeys("e")),
-		Delete:     key.NewBinding(key.WithKeys("x")),
-		New:        key.NewBinding(key.WithKeys("n")),
-		Settings:   key.NewBinding(key.WithKeys("s")),
+		Up:            key.NewBinding(key.WithKeys("k", "up")),
+		Down:          key.NewBinding(key.WithKeys("j", "down")),
+		Connect:       key.NewBinding(key.WithKeys("enter")),
+		Disconnect:    key.NewBinding(key.WithKeys("d")),
+		RestartDaemon: key.NewBinding(key.WithKeys("R")),
+		Cleanup:       key.NewBinding(key.WithKeys("c")),
+		Edit:          key.NewBinding(key.WithKeys("e")),
+		Delete:        key.NewBinding(key.WithKeys("x")),
+		New:           key.NewBinding(key.WithKeys("n")),
+		Settings:      key.NewBinding(key.WithKeys("s")),
 
 		ScrollUp:       key.NewBinding(key.WithKeys("k", "up")),
 		ScrollDown:     key.NewBinding(key.WithKeys("j", "down")),
