@@ -263,7 +263,7 @@ func renderStatusBar(state *app.State, width int) string {
 	} else if state.ActiveForm != nil {
 		help = "[tab] next  [enter] save  [esc] cancel"
 	} else if state.ReconnectCountdown > 0 {
-		help = "[esc] cancel reconnect  [c] cleanup  [?] help"
+		help = "[esc] cancel reconnect  [?] help"
 	} else {
 		switch state.FocusedPane {
 		case app.PaneStatus:
@@ -289,15 +289,15 @@ func renderStatusBar(state *app.State, width int) string {
 			if state.ResetPending {
 				help = "[r] confirm reset  [any] cancel"
 			} else {
-				help = "[enter] edit  [r][r] reset  [c] cleanup  [q] detach  [Q] quit  [?] help"
+				help = "[enter] edit  [r][r] reset  [q] detach  [Q] quit  [?] help"
 			}
 		case app.PaneOutput:
 			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy  [?] help"
 		case app.PaneInput:
 			if state.Status == app.StatusConnected || state.Status == app.StatusExternal || state.Status == app.StatusReconnecting {
-				help = "[enter] submit  [ctrl+d] disconnect  [c] cleanup  [q] detach  [Q] quit  [?] help"
+				help = "[enter] submit  [ctrl+d] disconnect  [q] detach  [Q] quit  [?] help"
 			} else {
-				help = "[enter] submit  [c] cleanup  [q] detach  [Q] quit  [?] help"
+				help = "[enter] submit  [q] detach  [Q] quit  [?] help"
 			}
 		}
 	}
@@ -413,9 +413,16 @@ func renderHelpContent(state *app.State, maxHeight int) string {
 	sections = append(sections, helpLine("q", "Detach (keep daemon)"))
 
 	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Status [1] ──"))
+	sections = append(sections, helpLine("d", "Disconnect"))
+	sections = append(sections, helpLine("c", "Cleanup stale processes/DNS"))
+	sections = append(sections, helpLine("R", "Restart daemon (double-tap)"))
+
+	sections = append(sections, "")
 	sections = append(sections, TitleStyle.Render("── Connections [2] ──"))
 	sections = append(sections, helpLine("enter", "Connect to selected"))
 	sections = append(sections, helpLine("d", "Disconnect"))
+	sections = append(sections, helpLine("c", "Cleanup stale processes/DNS"))
 	sections = append(sections, helpLine("n", "New connection"))
 	sections = append(sections, helpLine("e", "Edit connection"))
 	sections = append(sections, helpLine("x", "Delete connection"))
