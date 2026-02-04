@@ -553,6 +553,9 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if key.Matches(msg, a.Keys.RestartDaemon) {
 			return a.handleRestartDaemon()
 		}
+		if key.Matches(msg, a.Keys.Cleanup) {
+			return a.cleanup()
+		}
 		if key.Matches(msg, a.Keys.Disconnect) {
 			if a.State.Status == StatusExternal || a.State.Status == StatusConnected || a.State.Status == StatusReconnecting {
 				return a.disconnect()
