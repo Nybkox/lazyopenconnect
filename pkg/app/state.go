@@ -80,6 +80,9 @@ type State struct {
 	// Update notification
 	UpdateAvailable bool
 	UpdateVersion   string
+
+	ShowingHelp bool
+	HelpScroll  int
 }
 
 func NewState(cfg *models.Config) *State {

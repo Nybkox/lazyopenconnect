@@ -9,6 +9,7 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/app"
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
+	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
 func Render(state *app.State, spinnerFrame int) string {
@@ -54,7 +55,9 @@ func Render(state *app.State, spinnerFrame int) string {
 
 	main := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
 
-	if state.ActiveForm != nil {
+	if state.ShowingHelp {
+		main = overlayHelp(main, state, state.Width, totalHeight)
+	} else if state.ActiveForm != nil {
 		main = overlayForm(main, state.ActiveForm.View(), state.Width, totalHeight)
 	}
 
@@ -255,10 +258,12 @@ func renderInputContent(state *app.State) string {
 
 func renderStatusBar(state *app.State, width int) string {
 	var help string
-	if state.ActiveForm != nil {
+	if state.ShowingHelp {
+		help = "[j/k] scroll  [esc/?] close  [Q] quit"
+	} else if state.ActiveForm != nil {
 		help = "[tab] next  [enter] save  [esc] cancel"
 	} else if state.ReconnectCountdown > 0 {
-		help = "[esc] cancel reconnect"
+		help = "[esc] cancel reconnect  [c] cleanup  [?] help"
 	} else {
 		switch state.FocusedPane {
 		case app.PaneStatus:
@@ -268,31 +273,31 @@ func renderStatusBar(state *app.State, width int) string {
 			}
 			switch state.Status {
 			case app.StatusReconnecting:
-				help = "[d] cancel reconnect  [R][R] restart daemon  [q] detach  [Q] quit"
+				help = "[d] cancel  [c] cleanup  [R][R] restart  [q] detach  [Q] quit  [?] help"
 			case app.StatusExternal, app.StatusConnected:
-				help = "[d] disconnect  [R][R] restart daemon  [q] detach  [Q] quit"
+				help = "[d] disconnect  [c] cleanup  [R][R] restart  [q] detach  [Q] quit  [?] help"
 			default:
-				help = "[1-5] pane  [R][R] restart daemon  [q] detach  [Q] quit"
+				help = "[1-5] pane  [c] cleanup  [R][R] restart  [q] detach  [Q] quit  [?] help"
 			}
 		case app.PaneConnections:
 			if state.Status == app.StatusExternal {
-				help = "[j/k] nav  [d] disconnect  [n] new  [e] edit  [x] del  [q] detach"
+				help = "[j/k] nav  [d] disconnect  [c] cleanup  [n] new  [e] edit  [x] del  [?] help"
 			} else {
-				help = "[j/k] nav  [enter] connect  [n] new  [e] edit  [x] del  [q] detach"
+				help = "[j/k] nav  [enter] connect  [c] cleanup  [n] new  [e] edit  [x] del  [?] help"
 			}
 		case app.PaneSettings:
 			if state.ResetPending {
 				help = "[r] confirm reset  [any] cancel"
 			} else {
-				help = "[enter] edit  [r][r] reset  [q] detach  [Q] quit"
+				help = "[enter] edit  [r][r] reset  [c] cleanup  [q] detach  [Q] quit  [?] help"
 			}
 		case app.PaneOutput:
-			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy  [q] detach"
+			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy  [?] help"
 		case app.PaneInput:
 			if state.Status == app.StatusConnected || state.Status == app.StatusExternal || state.Status == app.StatusReconnecting {
-				help = "[enter] submit  [ctrl+d] disconnect  [q] detach  [Q] quit"
+				help = "[enter] submit  [ctrl+d] disconnect  [c] cleanup  [q] detach  [Q] quit  [?] help"
 			} else {
-				help = "[enter] submit  [q] detach  [Q] quit"
+				help = "[enter] submit  [c] cleanup  [q] detach  [Q] quit  [?] help"
 			}
 		}
 	}
@@ -371,4 +376,91 @@ func compositeOverlay(base, overlay string, width, height int) string {
 	}
 
 	return strings.Join(baseLines[:height], "\n")
+}
+
+func overlayHelp(base string, state *app.State, width, height int) string {
+	maxModalHeight := height - 4
+	content := renderHelpContent(state, maxModalHeight)
+	styledHelp := FormOverlayStyle.Render(content)
+	dimmed := dimContent(base, height)
+	return compositeOverlay(dimmed, styledHelp, width, height)
+}
+
+func renderHelpContent(state *app.State, maxHeight int) string {
+	helpWidth := 64
+
+	var sections []string
+
+	header := TitleStyle.Render("Help") + "  " + MutedStyle.Render("v"+version.Current)
+	sections = append(sections, header)
+
+	sections = append(sections, "")
+	sections = append(sections, "TUI for OpenConnect VPN. Daemon runs in")
+	sections = append(sections, "background - VPN persists after closing.")
+
+	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Common Issues ──"))
+	sections = append(sections, helpLine("c", "Cleanup stale processes/DNS"))
+	sections = append(sections, helpLine("R", "Restart daemon (double-tap)"))
+	sections = append(sections, helpLine("E", "Export logs for debugging"))
+
+	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Global ──"))
+	sections = append(sections, helpLine("1-5", "Focus pane"))
+	sections = append(sections, helpLine("tab", "Cycle focus"))
+	sections = append(sections, helpLine("?", "Toggle help"))
+	sections = append(sections, helpLine("Q", "Quit (stop daemon)"))
+	sections = append(sections, helpLine("q", "Detach (keep daemon)"))
+
+	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Connections [2] ──"))
+	sections = append(sections, helpLine("enter", "Connect to selected"))
+	sections = append(sections, helpLine("d", "Disconnect"))
+	sections = append(sections, helpLine("n", "New connection"))
+	sections = append(sections, helpLine("e", "Edit connection"))
+	sections = append(sections, helpLine("x", "Delete connection"))
+
+	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Settings [3] ──"))
+	sections = append(sections, helpLine("e", "Edit settings"))
+	sections = append(sections, helpLine("r", "Reset to defaults (double-tap)"))
+
+	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Output [4] ──"))
+	sections = append(sections, helpLine("j/k", "Scroll up/down"))
+	sections = append(sections, helpLine("g/G", "Go to top/bottom"))
+	sections = append(sections, helpLine("ctrl+u/d", "Page up/down"))
+	sections = append(sections, helpLine("E", "Export logs to file"))
+	sections = append(sections, helpLine("C", "Copy logs to clipboard"))
+
+	sections = append(sections, "")
+	sections = append(sections, TitleStyle.Render("── Input [5] ──"))
+	sections = append(sections, helpLine("enter", "Submit input"))
+	sections = append(sections, helpLine("esc", "Cancel/clear"))
+
+	sections = append(sections, "")
+	footer := MutedStyle.Render("[esc] or [?] to close")
+	padLen := (helpWidth - lipgloss.Width(footer)) / 2
+	sections = append(sections, strings.Repeat(" ", padLen)+footer)
+
+	totalLines := len(sections)
+	visibleLines := maxHeight - 4
+
+	if totalLines <= visibleLines {
+		return strings.Join(sections, "\n")
+	}
+
+	scroll := state.HelpScroll
+	maxScroll := totalLines - visibleLines
+	scroll = max(min(scroll, maxScroll), 0)
+
+	visible := sections[scroll : scroll+visibleLines]
+	content := strings.Join(visible, "\n")
+
+	return addScrollbar(content, visibleLines, helpWidth, scroll, totalLines, visibleLines)
+}
+
+func helpLine(key, desc string) string {
+	keyStyled := HelpKeyStyle.Render(fmt.Sprintf("%-10s", key))
+	return keyStyled + HelpDescStyle.Render(desc)
 }

@@ -479,6 +479,16 @@ func (a *App) handleQuit() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.State.ShowingHelp {
+		return a.handleHelpKeys(msg)
+	}
+
+	if key.Matches(msg, a.Keys.Help) {
+		a.State.ShowingHelp = true
+		a.State.HelpScroll = 0
+		return a, nil
+	}
+
 	if a.State.ReconnectCountdown > 0 && key.Matches(msg, a.Keys.Cancel) {
 		a.State.ReconnectCountdown = 0
 		a.State.ReconnectConnID = ""
@@ -559,5 +569,37 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a.updateInput(msg)
 	}
 
+	return a, nil
+}
+
+func (a *App) handleHelpKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, a.Keys.Cancel), key.Matches(msg, a.Keys.Help), key.Matches(msg, a.Keys.Detach):
+		a.State.ShowingHelp = false
+		a.State.HelpScroll = 0
+		return a, nil
+	case key.Matches(msg, a.Keys.Quit):
+		return a.handleQuit()
+	case key.Matches(msg, a.Keys.ScrollUp):
+		if a.State.HelpScroll > 0 {
+			a.State.HelpScroll--
+		}
+		return a, nil
+	case key.Matches(msg, a.Keys.ScrollDown):
+		a.State.HelpScroll++
+		return a, nil
+	case key.Matches(msg, a.Keys.ScrollToTop):
+		a.State.HelpScroll = 0
+		return a, nil
+	case key.Matches(msg, a.Keys.ScrollToBottom):
+		a.State.HelpScroll = 999
+		return a, nil
+	case key.Matches(msg, a.Keys.PageUp):
+		a.State.HelpScroll = max(a.State.HelpScroll-5, 0)
+		return a, nil
+	case key.Matches(msg, a.Keys.PageDown):
+		a.State.HelpScroll += 5
+		return a, nil
+	}
 	return a, nil
 }

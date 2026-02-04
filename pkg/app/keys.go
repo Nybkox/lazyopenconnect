@@ -38,6 +38,8 @@ type KeyMap struct {
 
 	Export   key.Binding
 	CopyLogs key.Binding
+
+	Help key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -77,5 +79,7 @@ func DefaultKeyMap() KeyMap {
 
 		Export:   key.NewBinding(key.WithKeys("E")),
 		CopyLogs: key.NewBinding(key.WithKeys("C")),
+
+		Help: key.NewBinding(key.WithKeys("?")),
 	}
 }
