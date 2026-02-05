@@ -54,6 +54,13 @@ type Daemon struct {
 	logFile    *os.File
 	logger     *slog.Logger
 	debug      bool
+
+	reconnectMu          sync.Mutex
+	reconnecting         bool
+	reconnectCancel      chan struct{}
+	disconnectRequested  bool
+	stoppingForReconnect bool
+	passwordCache        map[string]string
 }
 
 func SocketPath() (string, error) {
@@ -96,11 +103,12 @@ func New(debug bool) (*Daemon, error) {
 			Status: StatusDisconnected,
 			Config: models.NewConfig(),
 		},
-		version:    version.Current,
-		shutdown:   make(chan struct{}),
-		socketPath: socketPath,
-		pidPath:    pidFile,
-		debug:      debug,
+		version:       version.Current,
+		shutdown:      make(chan struct{}),
+		socketPath:    socketPath,
+		pidPath:       pidFile,
+		debug:         debug,
+		passwordCache: make(map[string]string),
 	}, nil
 }
 
@@ -132,6 +140,8 @@ func Run(debug bool) error {
 	defer d.Close()
 
 	d.logger.Info("daemon listening", "socket", d.socketPath, "pid", os.Getpid(), "version", d.version)
+
+	go d.wakeMonitor()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
@@ -465,7 +475,7 @@ func vpnLogPath() (string, error) {
 	return filepath.Join(dir, "vpn.log"), nil
 }
 
-func (d *Daemon) openVpnLogFile() error {
+func (d *Daemon) resetVpnLogFile() error {
 	path, err := vpnLogPath()
 	if err != nil {
 		return err
@@ -487,6 +497,28 @@ func (d *Daemon) openVpnLogFile() error {
 	d.stateMu.Lock()
 	d.state.LogLineCount = 0
 	d.stateMu.Unlock()
+
+	return nil
+}
+
+func (d *Daemon) ensureVpnLogFile() error {
+	path, err := vpnLogPath()
+	if err != nil {
+		return err
+	}
+
+	d.vpnLogMu.Lock()
+	defer d.vpnLogMu.Unlock()
+
+	if d.vpnLogFile != nil {
+		return nil
+	}
+
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return err
+	}
+	d.vpnLogFile = f
 
 	return nil
 }

@@ -41,6 +41,8 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	connID, _ := msg["conn_id"].(string)
 	password, _ := msg["password"].(string)
 
+	d.cancelReconnect()
+
 	d.stateMu.Lock()
 	if d.state.Status != StatusDisconnected {
 		d.stateMu.Unlock()
@@ -76,8 +78,15 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	d.state.ActiveConnID = connID
 	d.stateMu.Unlock()
 
+	d.reconnectMu.Lock()
+	d.disconnectRequested = false
+	if password != "" && conn.HasPassword {
+		d.passwordCache[connID] = password
+	}
+	d.reconnectMu.Unlock()
+
 	d.logger.Info("connecting", "conn_id", connID, "host", conn.Host, "protocol", conn.Protocol)
-	if err := d.openVpnLogFile(); err != nil {
+	if err := d.resetVpnLogFile(); err != nil {
 		d.logger.Error("failed to open vpn log file", "err", err)
 	}
 
@@ -101,6 +110,7 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 			Code:    "start_failed",
 			Message: err.Error(),
 		})
+		d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 		d.stateMu.Lock()
 		d.state.Status = StatusDisconnected
 		d.state.ActiveConnID = ""
@@ -116,6 +126,7 @@ func (d *Daemon) startVPN(conn *models.Connection, password string) {
 			Code:    "pty_failed",
 			Message: err.Error(),
 		})
+		d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 		d.stateMu.Lock()
 		d.state.Status = StatusDisconnected
 		d.state.ActiveConnID = ""
@@ -312,16 +323,42 @@ func (d *Daemon) handleVPNExit() {
 	d.vpnProcess = nil
 	d.vpnMu.Unlock()
 
+	d.reconnectMu.Lock()
+	stoppingForReconnect := d.stoppingForReconnect
+	d.stoppingForReconnect = false
+	disconnectRequested := d.disconnectRequested
+	d.reconnectMu.Unlock()
+
+	if stoppingForReconnect {
+		d.logger.Debug("vpn exit due to reconnect, skipping cleanup")
+		return
+	}
+
 	d.stateMu.Lock()
 	wasConnected := d.state.Status == StatusConnected
+	wasConnecting := d.state.Status == StatusConnecting
+	wasPrompting := d.state.Status == StatusPrompting
 	autoCleanup := d.state.Config.Settings.AutoCleanup
+	reconnectEnabled := d.state.Config.Settings.Reconnect
+	connID := d.state.ActiveConnID
 	d.state.Status = StatusDisconnected
 	d.state.ActiveConnID = ""
 	d.state.IP = ""
 	d.state.PID = 0
 	d.stateMu.Unlock()
 
-	d.logger.Info("vpn process exited", "was_connected", wasConnected)
+	d.logger.Info("vpn process exited", "was_connected", wasConnected, "disconnect_requested", disconnectRequested)
+
+	shouldReconnect := reconnectEnabled && !disconnectRequested && connID != "" &&
+		(wasConnected || wasConnecting || wasPrompting)
+
+	if shouldReconnect {
+		d.logger.Info("vpn exit: initiating auto-reconnect", "conn_id", connID)
+		d.addLog(ui.LogWarning("--- Connection lost, will reconnect ---"))
+		go d.startAutoReconnect(connID, "exit")
+		return
+	}
+
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 
 	if wasConnected && autoCleanup {
@@ -331,6 +368,8 @@ func (d *Daemon) handleVPNExit() {
 }
 
 func (d *Daemon) handleDisconnect() {
+	d.cancelReconnect()
+
 	d.stateMu.RLock()
 	status := d.state.Status
 	d.stateMu.RUnlock()

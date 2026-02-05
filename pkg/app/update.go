@@ -55,9 +55,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case helpers.VPNCleanupDoneMsg:
 		return a.handleVPNCleanupDone()
 
-	case reconnectTickMsg:
-		return a.handleReconnectTick()
-
 	case resetTimeoutMsg:
 		return a.handleResetTimeout()
 
@@ -115,7 +112,8 @@ func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
 		return a.handleDaemonCleanupStep(msg.Raw)
 	case "cleanup_done":
 		return a.handleDaemonCleanupDone()
-
+	case "reconnecting":
+		return a.handleDaemonReconnecting(msg.Raw)
 	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)
@@ -232,8 +230,6 @@ func (a *App) handleDaemonDisconnectedEvent() (tea.Model, tea.Cmd) {
 		return a, WaitForDaemonMsg(a.DaemonReader)
 	}
 
-	wasConnected := a.State.Status == StatusConnected
-
 	a.State.Status = StatusDisconnected
 	a.State.ActiveConnID = ""
 	a.State.IP = ""
@@ -243,12 +239,6 @@ func (a *App) handleDaemonDisconnectedEvent() (tea.Model, tea.Cmd) {
 	a.State.OutputLines = append(a.State.OutputLines, "--- Disconnected ---")
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
-
-	if wasConnected && a.State.Config.Settings.Reconnect && a.State.ActiveConnID != "" {
-		a.State.Status = StatusReconnecting
-		a.State.ReconnectConnID = a.State.ActiveConnID
-		return a.attemptReconnect()
-	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
@@ -262,18 +252,6 @@ func (a *App) handleDaemonError(msg map[string]any) (tea.Model, tea.Cmd) {
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
-	if a.State.ReconnectConnID != "" && a.State.ReconnectAttempts > 0 {
-		if a.State.ReconnectAttempts >= maxReconnectAttempts {
-			return a.reconnectFailed()
-		}
-		a.State.Status = StatusReconnecting
-		a.State.OutputLines = append(a.State.OutputLines,
-			ui.LogWarning(fmt.Sprintf("Retrying in %ds...", int(reconnectDelay.Seconds()))))
-		a.viewport.SetContent(a.renderOutput())
-		return a, tea.Batch(scheduleReconnectTick(), WaitForDaemonMsg(a.DaemonReader))
-	}
-
-	a.State.Status = StatusDisconnected
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
@@ -340,13 +318,6 @@ func (a *App) handleSpinnerTick() (tea.Model, tea.Cmd) {
 		return a, spinnerTick()
 	}
 	return a, nil
-}
-
-func (a *App) handleReconnectTick() (tea.Model, tea.Cmd) {
-	if a.State.Status != StatusReconnecting || a.State.ReconnectConnID == "" {
-		return a, nil
-	}
-	return a.attemptReconnect()
 }
 
 func (a *App) handleVPNCleanupStep(msg helpers.VPNCleanupStepMsg) (tea.Model, tea.Cmd) {

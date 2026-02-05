@@ -109,6 +109,14 @@ type CleanupDoneMsg struct {
 	Type string `json:"type"`
 }
 
+type ReconnectingMsg struct {
+	Type    string `json:"type"`
+	ConnID  string `json:"conn_id"`
+	Reason  string `json:"reason"`
+	Attempt int    `json:"attempt"`
+	Max     int    `json:"max"`
+}
+
 func WriteMsg(conn net.Conn, msg any) error {
 	data, err := json.Marshal(msg)
 	if err != nil {

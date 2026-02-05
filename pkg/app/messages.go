@@ -24,19 +24,6 @@ func scheduleConnectionTimeout() tea.Cmd {
 	})
 }
 
-type reconnectTickMsg struct{}
-
-const (
-	reconnectDelay       = 5 * time.Second
-	maxReconnectAttempts = 3
-)
-
-func scheduleReconnectTick() tea.Cmd {
-	return tea.Tick(reconnectDelay, func(time.Time) tea.Msg {
-		return reconnectTickMsg{}
-	})
-}
-
 type resetTimeoutMsg struct{}
 
 const resetConfirmTimeout = 2 * time.Second
