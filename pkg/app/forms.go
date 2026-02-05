@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
+	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
@@ -135,6 +136,7 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		}
 
 		_ = helpers.SaveConfig(a.State.Config)
+		a.syncConfigToDaemon()
 
 	case FormEditConn:
 		data := a.State.FormData.(*helpers.ConnectionFormData)
@@ -148,6 +150,7 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 			}
 
 			_ = helpers.SaveConfig(a.State.Config)
+			a.syncConfigToDaemon()
 		}
 
 	case FormDeleteConfirm:
@@ -167,6 +170,7 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 				}
 
 				_ = helpers.SaveConfig(a.State.Config)
+				a.syncConfigToDaemon()
 			}
 		}
 
@@ -175,6 +179,7 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		a.State.Config.Settings = *data.ToSettings()
 
 		_ = helpers.SaveConfig(a.State.Config)
+		a.syncConfigToDaemon()
 
 	case FormExportLogs:
 		data := a.State.FormData.(*helpers.ExportFormData)
@@ -244,4 +249,11 @@ func NewUpdateNoticeForm(newVersion string, data *UpdateNoticeData, isHomebrew b
 				Value(&data.Action),
 		),
 	).WithShowHelp(true).WithTheme(huh.ThemeCharm()).WithWidth(50)
+}
+
+func (a *App) syncConfigToDaemon() {
+	a.SendToDaemon(daemon.ConfigUpdateCmd{
+		Type:   "config_update",
+		Config: *a.State.Config,
+	})
 }
