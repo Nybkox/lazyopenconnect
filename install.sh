@@ -6,8 +6,7 @@ set -euo pipefail
 
 REPO="Nybkox/lazyopenconnect"
 BINARY="lazyopenconnect"
-INSTALL_DIR="$HOME/.local/bin"
-SYSTEM_INSTALL=false
+INSTALL_DIR=""
 DRY_RUN=false
 
 # Colors
@@ -28,7 +27,6 @@ parse_args() {
 	while [[ $# -gt 0 ]]; do
 		case "$1" in
 		--system)
-			SYSTEM_INSTALL=true
 			INSTALL_DIR="/usr/local/bin"
 			;;
 		--dry-run)
@@ -38,7 +36,7 @@ parse_args() {
 			echo "Usage: install.sh [OPTIONS]"
 			echo ""
 			echo "Options:"
-			echo "  --system    Install to /usr/local/bin (requires sudo)"
+			echo "  --system    Install to /usr/local/bin (Linux only, macOS uses this by default)"
 			echo "  --dry-run   Show what would happen without installing"
 			echo "  --help      Show this help message"
 			exit 0
@@ -116,7 +114,7 @@ record_install() {
 	mkdir -p "$config_dir"
 
 	local method="quick"
-	if [[ "$SYSTEM_INSTALL" == true ]]; then
+	if [[ "$INSTALL_DIR" == "/usr/local/bin" ]]; then
 		method="quick-system"
 	fi
 
@@ -169,6 +167,14 @@ main() {
 	OS=$(detect_os)
 	ARCH=$(detect_arch)
 
+	if [[ -z "$INSTALL_DIR" ]]; then
+		if [[ "$OS" == "darwin" ]]; then
+			INSTALL_DIR="/usr/local/bin"
+		else
+			INSTALL_DIR="$HOME/.local/bin"
+		fi
+	fi
+
 	info "Detected: OS=${OS}, Arch=${ARCH}"
 
 	if [[ "$DRY_RUN" == true ]]; then
@@ -189,16 +195,13 @@ main() {
 		info "[DRY-RUN] Would download: ${URL}"
 		info "[DRY-RUN] Would install to: ${INSTALL_DIR}/${BINARY}"
 		info "[DRY-RUN] Would create symlink: ${INSTALL_DIR}/lzcon -> ${BINARY}"
-		if [[ "$SYSTEM_INSTALL" == true ]]; then
-			if [ ! -w "$INSTALL_DIR" ]; then
-				info "[DRY-RUN] Would require sudo for system install"
-			fi
-		else
-			if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-				local shell_config
-				shell_config=$(detect_shell_config)
-				info "[DRY-RUN] Would prompt to add ~/.local/bin to PATH in ${shell_config}"
-			fi
+		if [ ! -w "$INSTALL_DIR" ] 2>/dev/null || [ ! -d "$INSTALL_DIR" ]; then
+			info "[DRY-RUN] Would require sudo to install"
+		fi
+		if [[ "$INSTALL_DIR" == "$HOME/.local/bin" ]] && [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+			local shell_config
+			shell_config=$(detect_shell_config)
+			info "[DRY-RUN] Would prompt to add ~/.local/bin to PATH in ${shell_config}"
 		fi
 		info "[DRY-RUN] Would record install method to ~/.config/lazyopenconnect/.installed-by"
 		info "[DRY-RUN] Run with: sudo ${BINARY} (or: sudo lzcon)"
@@ -216,24 +219,25 @@ main() {
 	tar -xzf "${TMP_DIR}/${ARCHIVE}" -C "$TMP_DIR"
 
 	# Install binary
-	if [[ "$SYSTEM_INSTALL" == true ]]; then
-		info "Installing to ${INSTALL_DIR} (system-wide)..."
-		if [ -w "$INSTALL_DIR" ]; then
-			mv "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+	NEEDS_SUDO=false
+	if [ ! -w "$INSTALL_DIR" ] 2>/dev/null; then
+		if [ -d "$INSTALL_DIR" ]; then
+			NEEDS_SUDO=true
 		else
-			sudo mv "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+			mkdir -p "$INSTALL_DIR" 2>/dev/null || NEEDS_SUDO=true
 		fi
+	fi
+
+	if [[ "$NEEDS_SUDO" == true ]]; then
+		info "Installing to ${INSTALL_DIR} (requires sudo)..."
+		sudo mkdir -p "$INSTALL_DIR"
+		sudo mv "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+		sudo chmod +x "${INSTALL_DIR}/${BINARY}"
+		sudo ln -sf "${INSTALL_DIR}/${BINARY}" "${INSTALL_DIR}/lzcon"
 	else
 		mkdir -p "$INSTALL_DIR"
 		mv "${TMP_DIR}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
-	fi
-
-	chmod +x "${INSTALL_DIR}/${BINARY}"
-
-	# Create alias symlink
-	if [[ "$SYSTEM_INSTALL" == true ]] && [ ! -w "$INSTALL_DIR" ]; then
-		sudo ln -sf "${INSTALL_DIR}/${BINARY}" "${INSTALL_DIR}/lzcon"
-	else
+		chmod +x "${INSTALL_DIR}/${BINARY}"
 		ln -sf "${INSTALL_DIR}/${BINARY}" "${INSTALL_DIR}/lzcon"
 	fi
 
@@ -243,8 +247,8 @@ main() {
 	info "Created alias: lzcon"
 	info "Run with: sudo ${BINARY} (or: sudo lzcon)"
 
-	# Ensure PATH is configured for user install
-	if [[ "$SYSTEM_INSTALL" == false ]]; then
+	# Ensure PATH is configured for user install (Linux only)
+	if [[ "$INSTALL_DIR" == "$HOME/.local/bin" ]]; then
 		ensure_path
 	fi
 
@@ -252,9 +256,7 @@ main() {
 	if command -v "$BINARY" &>/dev/null; then
 		info "Installation successful!"
 	else
-		if [[ "$SYSTEM_INSTALL" == true ]]; then
-			warn "${INSTALL_DIR} may not be in your PATH"
-		fi
+		warn "${INSTALL_DIR} may not be in your PATH"
 	fi
 }
 
