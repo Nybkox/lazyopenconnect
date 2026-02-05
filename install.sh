@@ -84,6 +84,14 @@ ensure_path() {
 
 	echo ""
 	warn "$HOME/.local/bin is not in your PATH"
+
+	if [[ ! -t 0 ]]; then
+		info "To add it, run:"
+		echo "  echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ${shell_config}"
+		echo "  source ${shell_config}"
+		return 0
+	fi
+
 	read -rp "Add it to ${shell_config}? [Y/n] " response
 
 	case "$response" in
