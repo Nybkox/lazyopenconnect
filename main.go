@@ -97,6 +97,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	if buildVersion == "dev" && daemonRunning(socketPath) {
+		fmt.Println("Dev mode: restarting daemon...")
+		shutdownDaemon(socketPath)
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if !daemonRunning(socketPath) {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+
 	var conn net.Conn
 	var reader *bufio.Reader
 
@@ -180,6 +192,15 @@ func daemonRunning(socketPath string) bool {
 	}
 	conn.Close()
 	return true
+}
+
+func shutdownDaemon(socketPath string) {
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		return
+	}
+	daemon.WriteMsg(conn, daemon.ShutdownCmd{Type: "shutdown"})
+	conn.Close()
 }
 
 func spawnDaemon() error {
