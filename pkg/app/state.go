@@ -61,7 +61,9 @@ type State struct {
 	TotalLogLines      int
 	LogLoadedFrom      int
 	LogLoadedTo        int
-	OutputScroll       int
+	OutputYOffset      int
+	OutputTotalLines   int
+	OutputVisibleLines int
 	ConnectionsScroll  int
 	ConnectionsVisible int
 	Width              int
@@ -87,12 +89,11 @@ type State struct {
 
 func NewState(cfg *models.Config) *State {
 	return &State{
-		Config:       cfg,
-		Selected:     0,
-		Status:       StatusDisconnected,
-		FocusedPane:  PaneConnections,
-		OutputLines:  []string{},
-		OutputScroll: 0,
+		Config:      cfg,
+		Selected:    0,
+		Status:      StatusDisconnected,
+		FocusedPane: PaneConnections,
+		OutputLines: []string{},
 	}
 }
 

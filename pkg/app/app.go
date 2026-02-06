@@ -56,5 +56,8 @@ func (a *App) View() string {
 	}
 	a.State.InputView = a.input.View()
 	a.State.OutputView = a.viewport.View()
+	a.State.OutputYOffset = a.viewport.YOffset
+	a.State.OutputTotalLines = a.viewport.TotalLineCount()
+	a.State.OutputVisibleLines = a.viewport.Height
 	return a.RenderView(a.State, a.spinnerFrame)
 }

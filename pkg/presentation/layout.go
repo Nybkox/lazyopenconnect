@@ -43,7 +43,7 @@ func Render(state *app.State, spinnerFrame int) string {
 
 	leftColumn := lipgloss.JoinVertical(lipgloss.Left, statusPane, connectionsPane, settingsPane)
 
-	outputPane := renderPane("Output", "4", renderOutputContent(state), rightWidth, outputHeight, state.FocusedPane == app.PaneOutput, state.ActiveForm != nil)
+	outputPane := renderPane("Output", "4", renderOutputContent(state, outputHeight-3, rightWidth-2), rightWidth, outputHeight, state.FocusedPane == app.PaneOutput, state.ActiveForm != nil)
 
 	inputTitle := "Input"
 	if state.IsPasswordPrompt {
@@ -239,11 +239,15 @@ func renderSettingsContent(state *app.State) string {
 	)
 }
 
-func renderOutputContent(state *app.State) string {
+func renderOutputContent(state *app.State, maxLines int, paneWidth int) string {
 	if state.OutputView == "" {
 		return MutedStyle.Render("No output yet.")
 	}
-	return state.OutputView
+	content := state.OutputView
+	if state.OutputTotalLines > state.OutputVisibleLines {
+		content = addScrollbar(content, maxLines, paneWidth, state.OutputYOffset, state.OutputTotalLines, state.OutputVisibleLines)
+	}
+	return content
 }
 
 func renderInputContent(state *app.State) string {
