@@ -410,6 +410,8 @@ func (d *Daemon) handleMessage(msg map[string]any) {
 		d.handleGetState()
 	case "get_logs":
 		d.handleGetLogs(msg)
+	case "clear_logs":
+		d.handleClearLogs()
 	case "connect":
 		d.handleConnect(msg)
 	case "disconnect":
@@ -687,6 +689,14 @@ func (d *Daemon) handleGetLogs(msg map[string]any) {
 		Lines:      lines,
 		TotalLines: totalLines,
 	})
+}
+
+func (d *Daemon) handleClearLogs() {
+	if err := d.resetVpnLogFile(); err != nil {
+		d.sendToClient(ErrorMsg{Type: "error", Code: "clear_logs_failed", Message: err.Error()})
+		return
+	}
+	d.handleGetState()
 }
 
 func (d *Daemon) handleCleanup() {

@@ -54,6 +54,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case restartTimeoutMsg:
 		return a.handleRestartTimeout()
 
+	case clearLogsTimeoutMsg:
+		return a.handleClearLogsTimeout()
+
 	case daemonRestartedMsg:
 		return a.handleDaemonRestarted(msg)
 
@@ -330,6 +333,13 @@ func (a *App) handleRestartTimeout() (tea.Model, tea.Cmd) {
 			ui.LogWarning("[Restart cancelled - timeout]"))
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
+	}
+	return a, nil
+}
+
+func (a *App) handleClearLogsTimeout() (tea.Model, tea.Cmd) {
+	if a.State.ClearLogsPending {
+		a.State.ClearLogsPending = false
 	}
 	return a, nil
 }

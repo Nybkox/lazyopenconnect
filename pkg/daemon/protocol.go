@@ -53,6 +53,10 @@ type GetLogsCmd struct {
 	To   int    `json:"to"`
 }
 
+type ClearLogsCmd struct {
+	Type string `json:"type"`
+}
+
 type StateMsg struct {
 	Type          string `json:"type"`
 	Status        int    `json:"status"`

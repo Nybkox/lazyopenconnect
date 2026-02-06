@@ -290,7 +290,11 @@ func renderStatusBar(state *app.State, width int) string {
 				help = "[enter] edit  [r][r] reset  [q] detach  [Q] quit  [?] help"
 			}
 		case app.PaneOutput:
-			help = "[j/k] scroll  [g/G] top/end  [E] export  [C] copy  [?] help"
+			if state.ClearLogsPending {
+				help = "[x] confirm clear  [any] cancel"
+			} else {
+				help = "[j/k] scroll  [g/G] top/end  [x][x] clear  [E] export  [C] copy  [?] help"
+			}
 		case app.PaneInput:
 			if state.Status == app.StatusConnected || state.Status == app.StatusExternal || state.Status == app.StatusReconnecting {
 				help = "[enter] submit  [ctrl+d] disconnect  [q] detach  [Q] quit  [?] help"
@@ -435,6 +439,7 @@ func renderHelpContent(state *app.State, maxHeight int) string {
 	sections = append(sections, helpLine("j/k", "Scroll up/down"))
 	sections = append(sections, helpLine("g/G", "Go to top/bottom"))
 	sections = append(sections, helpLine("ctrl+u/d", "Page up/down"))
+	sections = append(sections, helpLine("x", "Clear logs (double-tap)"))
 	sections = append(sections, helpLine("E", "Export logs to file"))
 	sections = append(sections, helpLine("C", "Copy logs to clipboard"))
 

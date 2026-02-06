@@ -44,6 +44,16 @@ func scheduleRestartTimeout() tea.Cmd {
 	})
 }
 
+type clearLogsTimeoutMsg struct{}
+
+const clearLogsConfirmTimeout = 2 * time.Second
+
+func scheduleClearLogsTimeout() tea.Cmd {
+	return tea.Tick(clearLogsConfirmTimeout, func(time.Time) tea.Msg {
+		return clearLogsTimeoutMsg{}
+	})
+}
+
 type externalCheckTickMsg struct{}
 
 func (a *App) scheduleExternalCheck() tea.Cmd {

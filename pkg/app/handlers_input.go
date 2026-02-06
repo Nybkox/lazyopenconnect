@@ -13,7 +13,22 @@ import (
 )
 
 func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.State.ClearLogsPending && !key.Matches(msg, a.Keys.Delete) {
+		a.State.ClearLogsPending = false
+	}
+
 	switch {
+	case key.Matches(msg, a.Keys.Delete):
+		if !a.State.ClearLogsPending {
+			a.State.ClearLogsPending = true
+			a.viewport.SetContent(a.renderOutput())
+			return a, scheduleClearLogsTimeout()
+		}
+
+		a.State.ClearLogsPending = false
+		a.clearOutputLogs()
+		a.SendToDaemon(daemon.ClearLogsCmd{Type: "clear_logs"})
+		return a, nil
 	case key.Matches(msg, a.Keys.Export):
 		return a.showExportLogsForm()
 	case key.Matches(msg, a.Keys.CopyLogs):
@@ -40,6 +55,15 @@ func (a *App) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	a.maybeFetchLogs()
 	return a, nil
+}
+
+func (a *App) clearOutputLogs() {
+	a.State.OutputLines = []string{}
+	a.State.TotalLogLines = 0
+	a.State.LogLoadedFrom = 0
+	a.State.LogLoadedTo = 0
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoTop()
 }
 
 func (a *App) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {

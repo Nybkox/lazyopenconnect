@@ -76,6 +76,7 @@ type State struct {
 	FormData   any
 
 	ResetPending     bool
+	ClearLogsPending bool
 	RestartPending   bool
 	RestartingDaemon bool
 
