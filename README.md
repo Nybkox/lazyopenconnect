@@ -121,6 +121,7 @@ sudo lzcon
 lazyopenconnect daemon status  # Check if daemon is running
 lazyopenconnect daemon start   # Start daemon manually
 lazyopenconnect daemon stop    # Stop daemon and disconnect VPN
+lazyopenconnect daemon stop all # Stop all matching stale daemons
 ```
 
 ## Uninstall
@@ -236,6 +237,12 @@ The client and daemon must run the same version. Stop the daemon to let the clie
 ```bash
 lazyopenconnect daemon stop
 sudo lazyopenconnect
+```
+
+If you suspect stale background daemons from older binaries or aliases, run:
+
+```bash
+lazyopenconnect daemon stop all
 ```
 
 ### Debugging with daemon logs

@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -118,7 +119,10 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
 				os.Exit(1)
 			}
-			time.Sleep(200 * time.Millisecond)
+			if !waitForDaemonReady(socketPath, 2*time.Second) {
+				fmt.Fprintln(os.Stderr, "Failed to start daemon: daemon did not become ready")
+				os.Exit(1)
+			}
 		}
 
 		conn, err = net.Dial("unix", socketPath)
@@ -187,11 +191,21 @@ func main() {
 func daemonRunning(socketPath string) bool {
 	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
 	if err != nil {
-		os.Remove(socketPath)
 		return false
 	}
 	conn.Close()
 	return true
+}
+
+func waitForDaemonReady(socketPath string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if daemonRunning(socketPath) {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
 }
 
 func shutdownDaemon(socketPath string) {
@@ -237,6 +251,7 @@ Usage:
 Commands:
   daemon start    Start the background daemon
   daemon stop     Stop the background daemon
+  daemon stop all Stop all matching stale daemons
   daemon status   Check if daemon is running
   update          Check for and install updates
   uninstall       Remove lazyopenconnect
@@ -248,7 +263,7 @@ Flags:`)
 
 func handleDaemonCmd(args []string) {
 	if len(args) < 1 {
-		fmt.Println("Usage: lazyopenconnect daemon <start|stop|status>")
+		fmt.Println("Usage: lazyopenconnect daemon <start|stop all|status>")
 		return
 	}
 
@@ -268,8 +283,7 @@ func handleDaemonCmd(args []string) {
 			fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
 			os.Exit(1)
 		}
-		time.Sleep(200 * time.Millisecond)
-		if daemonRunning(socketPath) {
+		if waitForDaemonReady(socketPath, 2*time.Second) {
 			fmt.Println("Daemon started")
 		} else {
 			fmt.Fprintln(os.Stderr, "Daemon failed to start")
@@ -277,6 +291,14 @@ func handleDaemonCmd(args []string) {
 		}
 
 	case "stop":
+		if len(args) > 1 && args[1] == "all" {
+			if err := stopAllDaemons(socketPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to stop all daemons: %v\n", err)
+				os.Exit(1)
+			}
+			return
+		}
+
 		if !daemonRunning(socketPath) {
 			fmt.Println("Daemon is not running")
 			return
@@ -298,8 +320,146 @@ func handleDaemonCmd(args []string) {
 		}
 
 	default:
-		fmt.Println("Usage: lazyopenconnect daemon <start|stop|status>")
+		fmt.Println("Usage: lazyopenconnect daemon <start|stop all|status>")
 	}
+}
+
+type daemonProc struct {
+	pid  int
+	comm string
+	args []string
+}
+
+func stopAllDaemons(socketPath string) error {
+	if daemonRunning(socketPath) {
+		shutdownDaemon(socketPath)
+		time.Sleep(150 * time.Millisecond)
+	}
+
+	procs, err := findMatchingDaemonProcs()
+	if err != nil {
+		return err
+	}
+
+	if len(procs) == 0 {
+		fmt.Println("No matching daemon processes found")
+		return nil
+	}
+
+	terminated := 0
+	forceKilled := 0
+
+	for _, proc := range procs {
+		process, err := os.FindProcess(proc.pid)
+		if err != nil {
+			continue
+		}
+
+		if err := process.Signal(syscall.SIGTERM); err != nil {
+			continue
+		}
+		terminated++
+
+		if waitForExit(proc.pid, 1500*time.Millisecond) {
+			continue
+		}
+
+		if err := process.Signal(syscall.SIGKILL); err != nil {
+			continue
+		}
+		if waitForExit(proc.pid, 500*time.Millisecond) {
+			forceKilled++
+		}
+	}
+
+	if terminated == 0 {
+		fmt.Println("No matching daemon processes found")
+		return nil
+	}
+
+	fmt.Printf("Stopped %d daemon process(es)", terminated)
+	if forceKilled > 0 {
+		fmt.Printf(" (%d force-killed)", forceKilled)
+	}
+	fmt.Println()
+	return nil
+}
+
+func findMatchingDaemonProcs() ([]daemonProc, error) {
+	selfPID := os.Getpid()
+
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	exeBase := strings.ToLower(filepathBase(exe))
+
+	allowedNames := map[string]struct{}{
+		exeBase:           {},
+		"lazyopenconnect": {},
+		"lzcon":           {},
+	}
+
+	out, err := exec.Command("ps", "-axo", "pid=,comm=,args=").Output()
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[int]struct{})
+	var matches []daemonProc
+
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 {
+			continue
+		}
+
+		pid, err := strconv.Atoi(fields[0])
+		if err != nil || pid == selfPID {
+			continue
+		}
+
+		args := fields[2:]
+		if len(args) < 3 || args[1] != "daemon" || args[2] != "run" {
+			continue
+		}
+
+		comm := strings.ToLower(filepathBase(fields[1]))
+		arg0 := strings.ToLower(filepathBase(args[0]))
+		if _, ok := allowedNames[comm]; !ok {
+			if _, ok := allowedNames[arg0]; !ok {
+				continue
+			}
+		}
+
+		if _, ok := seen[pid]; ok {
+			continue
+		}
+		seen[pid] = struct{}{}
+		matches = append(matches, daemonProc{pid: pid, comm: comm, args: args})
+	}
+
+	return matches, nil
+}
+
+func waitForExit(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		err := syscall.Kill(pid, 0)
+		if err == syscall.ESRCH {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
+
+func filepathBase(path string) string {
+	parts := strings.Split(strings.ReplaceAll(path, "\\", "/"), "/")
+	if len(parts) == 0 {
+		return path
+	}
+	return parts[len(parts)-1]
 }
 
 func handleUpdate() {
