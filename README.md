@@ -29,10 +29,13 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 - **External VPN detection** - Detects and displays OpenConnect processes started outside the TUI
 - **Detach/attach support** - Close the TUI while keeping VPN connected (`q` to detach, `Q` to quit)
 - **Daemon architecture** - VPN runs in a background daemon, TUI connects via Unix socket
-- **Automatic daemon management** - Daemon auto-restarts on version mismatch, auto-starts with client
+- **Automatic daemon management** - Daemon auto-restarts on version mismatch, auto-starts with client, and supports `daemon stop all` for stale processes
 - **Efficient log handling** - VPN logs stored in file with lazy loading (paginated fetch as you scroll)
 - **Interactive prompts** - Handle 2FA, OTP, and other authentication prompts directly in the TUI
-- **Network cleanup** - One-key cleanup of routes, DNS, and interfaces after disconnect
+- **Smart disconnect cleanup** - Uses OpenConnect built-in cleanup first, then falls back to manual route/DNS/interface cleanup
+- **Reconnect on wake** - Better reliability after laptop sleep/wake cycles
+- **Config-to-daemon sync** - Connection create/edit changes are synced to daemon immediately
+- **Hardened daemon locking** - Reduced stale lock and duplicate daemon edge cases
 - **Vim-style navigation** - `j/k` for movement, `g/G` for top/bottom, `ctrl+d/u` for page scroll
 
 ## Screenshots
@@ -48,6 +51,8 @@ curl -fsSL https://raw.githubusercontent.com/Nybkox/lazyopenconnect/master/insta
 ```
 
 Installs to `~/.local/bin` (no sudo required). Creates `lzcon` alias. Prompts to add to PATH if needed.
+
+The installer also handles piped execution safely and uses OS-specific install directories when needed.
 
 ```bash
 # Install system-wide (requires sudo)

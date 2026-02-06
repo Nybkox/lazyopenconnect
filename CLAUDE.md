@@ -222,6 +222,15 @@ func GetPassword(connectionID string) (string, error) {
 
 ## Architecture Notes
 
+### Behavior Notes
+
+- OpenConnect built-in cleanup is attempted first on disconnect; legacy/manual cleanup is fallback.
+- `lazyopenconnect daemon stop all` is available to terminate all matching stale daemons.
+- Client reconnect-on-wake flow is in place for sleep/wake scenarios.
+- Config updates from connection create/edit are synced to daemon immediately.
+- Daemon lock handling was tightened to reduce stale lock and duplicate daemon issues.
+- Installer behavior was improved for piped `install.sh` and OS-specific install directories.
+
 ### Client-Daemon Model
 
 The application uses a client-daemon architecture:
