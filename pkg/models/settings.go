@@ -1,5 +1,7 @@
 package models
 
+import "runtime"
+
 type Settings struct {
 	DNS               string `json:"dns"`
 	Reconnect         bool   `json:"reconnect"`
@@ -17,17 +19,23 @@ func (s *Settings) GetWifiInterface() string {
 }
 
 func (s *Settings) GetNetInterface() string {
-	if s.NetInterface == "" {
+	if s.NetInterface != "" {
+		return s.NetInterface
+	}
+	if runtime.GOOS == "darwin" {
 		return "en0"
 	}
-	return s.NetInterface
+	return "eth0"
 }
 
 func (s *Settings) GetTunnelInterface() string {
-	if s.TunnelInterface == "" {
+	if s.TunnelInterface != "" {
+		return s.TunnelInterface
+	}
+	if runtime.GOOS == "darwin" {
 		return "utun0"
 	}
-	return s.TunnelInterface
+	return "tun0"
 }
 
 func (s *Settings) GetDNS() string {

@@ -70,12 +70,8 @@ func (a *App) disconnect() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) cleanup() (tea.Model, tea.Cmd) {
-	a.State.OutputLines = append(a.State.OutputLines, "--- Running cleanup ---")
-	a.viewport.SetContent(a.renderOutput())
-	return a, tea.Batch(
-		helpers.RunCleanup(&a.State.Config.Settings),
-		helpers.WaitForCleanupStep(),
-	)
+	a.SendToDaemon(daemon.CleanupCmd{Type: "cleanup"})
+	return a, nil
 }
 
 func (a *App) renderOutput() string {

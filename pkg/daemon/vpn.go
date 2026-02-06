@@ -13,13 +13,15 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/term"
 
+	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 var (
-	ipPattern  = regexp.MustCompile(`Configured as (\d+\.\d+\.\d+\.\d+)`)
-	pidPattern = regexp.MustCompile(`pid (\d+)`)
+	ipPattern     = regexp.MustCompile(`Configured as (\d+\.\d+\.\d+\.\d+)`)
+	pidPattern    = regexp.MustCompile(`pid (\d+)`)
+	tunDevPattern = regexp.MustCompile(`(?i)(?:set up|using) (?:tun|DTLS) (?:device|connection) (\S+)`)
 
 	connectedPatterns = []string{
 		"continuing in background",
@@ -76,6 +78,7 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 
 	d.state.Status = StatusConnecting
 	d.state.ActiveConnID = connID
+	settings := d.state.Config.Settings
 	d.stateMu.Unlock()
 
 	d.reconnectMu.Lock()
@@ -86,6 +89,32 @@ func (d *Daemon) handleConnect(msg map[string]any) {
 	d.reconnectMu.Unlock()
 
 	d.logger.Info("connecting", "conn_id", connID, "host", conn.Host, "protocol", conn.Protocol)
+
+	snap := helpers.CaptureNetworkSnapshot()
+	d.logger.Info("network snapshot captured",
+		"interface", snap.DefaultInterface,
+		"gateway", snap.DefaultGateway,
+		"dns", snap.DNSServers,
+		"wifi_service", snap.WifiServiceName,
+	)
+
+	if settings.NetInterface != "" {
+		snap.DefaultInterface = settings.NetInterface
+	}
+	if settings.WifiInterface != "" {
+		snap.WifiServiceName = settings.WifiInterface
+	}
+	if settings.DNS != "" {
+		snap.DNSServers = strings.Fields(settings.DNS)
+	}
+	if settings.TunnelInterface != "" {
+		snap.TunnelInterface = settings.TunnelInterface
+	}
+
+	d.stateMu.Lock()
+	d.state.NetworkSnapshot = snap
+	d.stateMu.Unlock()
+
 	if err := d.resetVpnLogFile(); err != nil {
 		d.logger.Error("failed to open vpn log file", "err", err)
 	}
@@ -291,6 +320,15 @@ func (d *Daemon) checkLineForEvents(line string) {
 
 	if match := pidPattern.FindStringSubmatch(line); len(match) > 1 {
 		pid, _ = strconv.Atoi(match[1])
+	}
+
+	if match := tunDevPattern.FindStringSubmatch(line); len(match) > 1 {
+		d.stateMu.Lock()
+		if d.state.NetworkSnapshot != nil {
+			d.state.NetworkSnapshot.TunnelInterface = match[1]
+			d.logger.Info("tunnel interface detected", "device", match[1])
+		}
+		d.stateMu.Unlock()
 	}
 
 	lineLower := strings.ToLower(line)

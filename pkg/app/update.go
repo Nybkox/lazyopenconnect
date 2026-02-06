@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
 	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
@@ -48,12 +47,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case DaemonDisconnectedMsg:
 		return a.handleDaemonDisconnected()
-
-	case helpers.VPNCleanupStepMsg:
-		return a.handleVPNCleanupStep(msg)
-
-	case helpers.VPNCleanupDoneMsg:
-		return a.handleVPNCleanupDone()
 
 	case resetTimeoutMsg:
 		return a.handleResetTimeout()
@@ -110,6 +103,10 @@ func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
 		return a.handleKicked()
 	case "reconnecting":
 		return a.handleDaemonReconnecting(msg.Raw)
+	case "cleanup_step":
+		return a.handleDaemonCleanupStep(msg.Raw)
+	case "cleanup_done":
+		return a.handleDaemonCleanupDone()
 	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)
@@ -296,14 +293,15 @@ func (a *App) handleSpinnerTick() (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a *App) handleVPNCleanupStep(msg helpers.VPNCleanupStepMsg) (tea.Model, tea.Cmd) {
-	a.State.OutputLines = append(a.State.OutputLines, string(msg))
+func (a *App) handleDaemonCleanupStep(msg map[string]any) (tea.Model, tea.Cmd) {
+	line, _ := msg["line"].(string)
+	a.State.OutputLines = append(a.State.OutputLines, line)
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
-	return a, helpers.WaitForCleanupStep()
+	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
-func (a *App) handleVPNCleanupDone() (tea.Model, tea.Cmd) {
+func (a *App) handleDaemonCleanupDone() (tea.Model, tea.Cmd) {
 	a.State.OutputLines = append(a.State.OutputLines, "--- Cleanup complete ---")
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
@@ -311,7 +309,7 @@ func (a *App) handleVPNCleanupDone() (tea.Model, tea.Cmd) {
 	if a.State.Status == StatusQuitting {
 		return a, tea.Quit
 	}
-	return a, nil
+	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
 func (a *App) handleResetTimeout() (tea.Model, tea.Cmd) {

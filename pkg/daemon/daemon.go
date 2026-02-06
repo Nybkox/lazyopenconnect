@@ -29,12 +29,13 @@ const (
 )
 
 type DaemonState struct {
-	Status       ConnStatus
-	ActiveConnID string
-	IP           string
-	PID          int
-	LogLineCount int
-	Config       *models.Config
+	Status          ConnStatus
+	ActiveConnID    string
+	IP              string
+	PID             int
+	LogLineCount    int
+	Config          *models.Config
+	NetworkSnapshot *helpers.NetworkSnapshot
 }
 
 type Daemon struct {
@@ -64,6 +65,9 @@ type Daemon struct {
 	disconnectRequested  bool
 	stoppingForReconnect bool
 	passwordCache        map[string]string
+
+	cleanupMu      sync.Mutex
+	cleanupRunning bool
 }
 
 func SocketPath() (string, error) {
@@ -414,6 +418,16 @@ func (d *Daemon) handleMessage(msg map[string]any) {
 		d.handleInput(msg)
 	case "config_update":
 		d.handleConfigUpdate(msg)
+	case "cleanup":
+		d.cleanupMu.Lock()
+		if d.cleanupRunning {
+			d.cleanupMu.Unlock()
+			d.sendToClient(ErrorMsg{Type: "error", Code: "cleanup_running", Message: "cleanup already running"})
+			return
+		}
+		d.cleanupRunning = true
+		d.cleanupMu.Unlock()
+		go d.handleCleanup()
 
 	case "shutdown":
 		d.Shutdown()
@@ -673,6 +687,46 @@ func (d *Daemon) handleGetLogs(msg map[string]any) {
 		Lines:      lines,
 		TotalLines: totalLines,
 	})
+}
+
+func (d *Daemon) handleCleanup() {
+	defer func() {
+		d.cleanupMu.Lock()
+		d.cleanupRunning = false
+		d.cleanupMu.Unlock()
+	}()
+
+	d.logger.Info("running manual cleanup")
+
+	d.stateMu.RLock()
+	snap := d.state.NetworkSnapshot
+	settings := d.state.Config.Settings
+	d.stateMu.RUnlock()
+
+	if snap == nil {
+		snap = helpers.CaptureNetworkSnapshot()
+	}
+	if settings.NetInterface != "" {
+		snap.DefaultInterface = settings.NetInterface
+	}
+	if settings.WifiInterface != "" {
+		snap.WifiServiceName = settings.WifiInterface
+	}
+	if settings.DNS != "" {
+		snap.DNSServers = strings.Fields(settings.DNS)
+	}
+	if settings.TunnelInterface != "" {
+		snap.TunnelInterface = settings.TunnelInterface
+	}
+
+	d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "--- Running cleanup ---"})
+
+	results := helpers.RunCleanupSteps(snap)
+	for _, line := range helpers.FormatCleanupResults(results) {
+		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: line})
+	}
+
+	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
 }
 
 func (d *Daemon) Shutdown() {
