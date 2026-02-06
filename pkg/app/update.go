@@ -108,10 +108,6 @@ func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
 		return a.handleDaemonError(msg.Raw)
 	case "kicked":
 		return a.handleKicked()
-	case "cleanup_step":
-		return a.handleDaemonCleanupStep(msg.Raw)
-	case "cleanup_done":
-		return a.handleDaemonCleanupDone()
 	case "reconnecting":
 		return a.handleDaemonReconnecting(msg.Raw)
 	}
@@ -260,26 +256,6 @@ func (a *App) handleKicked() (tea.Model, tea.Cmd) {
 		ui.LogWarning("Another client connected. Exiting..."))
 	a.viewport.SetContent(a.renderOutput())
 	return a, tea.Quit
-}
-
-func (a *App) handleDaemonCleanupStep(msg map[string]any) (tea.Model, tea.Cmd) {
-	if line, ok := msg["line"].(string); ok {
-		a.State.OutputLines = append(a.State.OutputLines, line)
-		a.viewport.SetContent(a.renderOutput())
-		a.viewport.GotoBottom()
-	}
-	return a, WaitForDaemonMsg(a.DaemonReader)
-}
-
-func (a *App) handleDaemonCleanupDone() (tea.Model, tea.Cmd) {
-	a.State.OutputLines = append(a.State.OutputLines, "--- Cleanup complete ---")
-	a.viewport.SetContent(a.renderOutput())
-	a.viewport.GotoBottom()
-
-	if a.State.Status == StatusQuitting {
-		return a, tea.Quit
-	}
-	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
 func (a *App) handleDaemonDisconnected() (tea.Model, tea.Cmd) {

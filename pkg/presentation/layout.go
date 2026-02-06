@@ -233,15 +233,9 @@ func renderSettingsContent(state *app.State) string {
 		reconnect = "on"
 	}
 
-	cleanup := "off"
-	if state.Config.Settings.AutoCleanup {
-		cleanup = "on"
-	}
-
-	return fmt.Sprintf("%s %s  %s %s %s %s",
+	return fmt.Sprintf("%s %s  %s %s",
 		MutedStyle.Render("DNS:"), dns,
 		MutedStyle.Render("Reconnect:"), reconnect,
-		MutedStyle.Render("Auto cleanup:"), cleanup,
 	)
 }
 

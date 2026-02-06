@@ -9,9 +9,8 @@ func NewConfig() *Config {
 	return &Config{
 		Connections: []Connection{},
 		Settings: Settings{
-			DNS:         "",
-			Reconnect:   false,
-			AutoCleanup: true,
+			DNS:       "",
+			Reconnect: false,
 		},
 	}
 }

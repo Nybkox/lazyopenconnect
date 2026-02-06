@@ -418,7 +418,6 @@ func parseConfig(data map[string]any) *models.Config {
 	if settings, ok := data["settings"].(map[string]any); ok {
 		cfg.Settings.DNS = getString(settings, "dns")
 		cfg.Settings.Reconnect = getBool(settings, "reconnect")
-		cfg.Settings.AutoCleanup = getBool(settings, "autoCleanup")
 		cfg.Settings.TunnelInterface = getString(settings, "tunnelInterface")
 		cfg.Settings.NetInterface = getString(settings, "netInterface")
 		cfg.Settings.WifiInterface = getString(settings, "wifiInterface")

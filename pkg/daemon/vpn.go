@@ -334,11 +334,15 @@ func (d *Daemon) handleVPNExit() {
 		return
 	}
 
+	if disconnectRequested {
+		d.logger.Debug("vpn exit due to user disconnect, handled by disconnectVPN()")
+		return
+	}
+
 	d.stateMu.Lock()
 	wasConnected := d.state.Status == StatusConnected
 	wasConnecting := d.state.Status == StatusConnecting
 	wasPrompting := d.state.Status == StatusPrompting
-	autoCleanup := d.state.Config.Settings.AutoCleanup
 	reconnectEnabled := d.state.Config.Settings.Reconnect
 	connID := d.state.ActiveConnID
 	d.state.Status = StatusDisconnected
@@ -360,11 +364,6 @@ func (d *Daemon) handleVPNExit() {
 	}
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
-
-	if wasConnected && autoCleanup {
-		d.logger.Debug("running auto cleanup")
-		d.runCleanup()
-	}
 }
 
 func (d *Daemon) handleDisconnect() {
@@ -391,13 +390,24 @@ func (d *Daemon) disconnectVPN() {
 
 	if proc != nil && proc.cmd != nil && proc.cmd.Process != nil {
 		pid := proc.cmd.Process.Pid
-		d.addLog(ui.LogCommand(fmt.Sprintf("kill %d", pid)))
+		d.addLog(ui.LogCommand(fmt.Sprintf("kill -TERM %d", pid)))
 		proc.cmd.Process.Signal(syscall.SIGTERM)
 
+		exited := make(chan struct{})
 		go func() {
-			time.Sleep(3 * time.Second)
-			proc.cmd.Process.Kill()
+			proc.cmd.Wait()
+			close(exited)
 		}()
+
+		select {
+		case <-exited:
+			d.logger.Debug("vpn process exited gracefully after SIGTERM")
+		case <-time.After(8 * time.Second):
+			d.logger.Warn("vpn process did not exit after SIGTERM, sending SIGKILL")
+			d.addLog(ui.LogCommand(fmt.Sprintf("kill -KILL %d", pid)))
+			proc.cmd.Process.Kill()
+			<-exited
+		}
 
 		if proc.ptmx != nil {
 			proc.ptmx.Close()
@@ -409,15 +419,9 @@ func (d *Daemon) disconnectVPN() {
 	d.state.ActiveConnID = ""
 	d.state.IP = ""
 	d.state.PID = 0
-	autoCleanup := d.state.Config.Settings.AutoCleanup
 	d.stateMu.Unlock()
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
-
-	if autoCleanup {
-		d.logger.Debug("running auto cleanup")
-		d.runCleanup()
-	}
 }
 
 func (d *Daemon) handleInput(msg map[string]any) {
@@ -434,77 +438,4 @@ func (d *Daemon) handleInput(msg map[string]any) {
 		d.state.Status = StatusConnecting
 		d.stateMu.Unlock()
 	}
-}
-
-func (d *Daemon) runCleanup() {
-	d.logger.Info("starting cleanup")
-	d.stateMu.RLock()
-	settings := d.state.Config.Settings
-	d.stateMu.RUnlock()
-
-	tunnelIface := settings.GetTunnelInterface()
-	netIface := settings.GetNetInterface()
-	wifiIface := settings.GetWifiInterface()
-	dns := settings.GetDNS()
-
-	steps := []struct {
-		name string
-		cmd  string
-		fn   func() error
-	}{
-		{
-			"Killing tunnel interface (" + tunnelIface + ")",
-			"ifconfig " + tunnelIface + " down",
-			func() error {
-				return exec.Command("ifconfig", tunnelIface, "down").Run()
-			},
-		},
-		{
-			"Flushing routes",
-			"route -n flush",
-			func() error {
-				return exec.Command("route", "-n", "flush").Run()
-			},
-		},
-		{
-			"Restarting network interface (" + netIface + ")",
-			"ifconfig " + netIface + " down && ifconfig " + netIface + " up",
-			func() error {
-				exec.Command("ifconfig", netIface, "down").Run()
-				time.Sleep(500 * time.Millisecond)
-				return exec.Command("ifconfig", netIface, "up").Run()
-			},
-		},
-		{
-			"Restoring DNS to " + dns,
-			"networksetup -setdnsservers " + wifiIface + " " + dns,
-			func() error {
-				args := append([]string{"-setdnsservers", wifiIface}, strings.Fields(dns)...)
-				return exec.Command("networksetup", args...).Run()
-			},
-		},
-		{
-			"Flushing DNS cache",
-			"dscacheutil -flushcache && killall -HUP mDNSResponder",
-			func() error {
-				exec.Command("dscacheutil", "-flushcache").Run()
-				return exec.Command("killall", "-HUP", "mDNSResponder").Run()
-			},
-		},
-	}
-
-	for _, step := range steps {
-		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: step.name + "..."})
-		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: ui.LogCommand(step.cmd)})
-		if err := step.fn(); err != nil {
-			d.logger.Debug("cleanup step failed", "step", step.name, "err", err)
-			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: ui.LogFail("✗ " + err.Error())})
-		} else {
-			d.logger.Debug("cleanup step completed", "step", step.name)
-			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: ui.LogOK("✓ Done")})
-		}
-	}
-
-	d.logger.Info("cleanup completed")
-	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
 }

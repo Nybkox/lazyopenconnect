@@ -124,7 +124,6 @@ func NewConnectionForm(data *ConnectionFormData, width int, isEdit bool) *huh.Fo
 type SettingsFormData struct {
 	DNS             string
 	Reconnect       bool
-	AutoCleanup     bool
 	WifiInterface   string
 	NetInterface    string
 	TunnelInterface string
@@ -134,7 +133,6 @@ func NewSettingsFormData(settings *models.Settings) *SettingsFormData {
 	return &SettingsFormData{
 		DNS:             settings.GetDNS(),
 		Reconnect:       settings.Reconnect,
-		AutoCleanup:     settings.AutoCleanup,
 		WifiInterface:   settings.GetWifiInterface(),
 		NetInterface:    settings.GetNetInterface(),
 		TunnelInterface: settings.GetTunnelInterface(),
@@ -145,7 +143,6 @@ func (d *SettingsFormData) ToSettings() *models.Settings {
 	return &models.Settings{
 		DNS:             d.DNS,
 		Reconnect:       d.Reconnect,
-		AutoCleanup:     d.AutoCleanup,
 		WifiInterface:   d.WifiInterface,
 		NetInterface:    d.NetInterface,
 		TunnelInterface: d.TunnelInterface,
@@ -165,11 +162,6 @@ func NewSettingsForm(data *SettingsFormData, width int) *huh.Form {
 				Title("Auto-reconnect").
 				Value(&data.Reconnect).
 				Description("Automatically reconnect on disconnect"),
-
-			huh.NewConfirm().
-				Title("Auto-cleanup").
-				Value(&data.AutoCleanup).
-				Description("Run network cleanup after disconnect"),
 
 			huh.NewInput().
 				Title("WiFi Interface").

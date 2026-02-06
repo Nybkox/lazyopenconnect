@@ -100,15 +100,6 @@ type KickedMsg struct {
 	Type string `json:"type"`
 }
 
-type CleanupStepMsg struct {
-	Type string `json:"type"`
-	Line string `json:"line"`
-}
-
-type CleanupDoneMsg struct {
-	Type string `json:"type"`
-}
-
 type ReconnectingMsg struct {
 	Type    string `json:"type"`
 	ConnID  string `json:"conn_id"`

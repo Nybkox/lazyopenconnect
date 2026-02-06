@@ -88,9 +88,8 @@ func (a *App) resetSettings() (tea.Model, tea.Cmd) {
 	a.State.ResetPending = false
 
 	a.State.Config.Settings = models.Settings{
-		DNS:         "",
-		Reconnect:   false,
-		AutoCleanup: true,
+		DNS:       "",
+		Reconnect: false,
 	}
 
 	_ = helpers.SaveConfig(a.State.Config)
