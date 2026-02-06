@@ -38,22 +38,25 @@ type DaemonState struct {
 }
 
 type Daemon struct {
-	listener   net.Listener
-	client     net.Conn
-	clientMu   sync.Mutex
-	stateMu    sync.RWMutex
-	vpnMu      sync.Mutex
-	vpnLogMu   sync.Mutex
-	state      *DaemonState
-	vpnProcess *VPNProcess
-	vpnLogFile *os.File
-	version    string
-	shutdown   chan struct{}
-	socketPath string
-	pidPath    string
-	logFile    *os.File
-	logger     *slog.Logger
-	debug      bool
+	listener    net.Listener
+	client      net.Conn
+	clientMu    sync.Mutex
+	stateMu     sync.RWMutex
+	vpnMu       sync.Mutex
+	vpnLogMu    sync.Mutex
+	state       *DaemonState
+	vpnProcess  *VPNProcess
+	vpnLogFile  *os.File
+	version     string
+	shutdown    chan struct{}
+	socketPath  string
+	pidPath     string
+	lockPath    string
+	logFile     *os.File
+	lockFile    *os.File
+	logger      *slog.Logger
+	debug       bool
+	socketOwned bool
 
 	reconnectMu          sync.Mutex
 	reconnecting         bool
@@ -87,6 +90,14 @@ func logPath() (string, error) {
 	return filepath.Join(dir, "daemon.log"), nil
 }
 
+func daemonLockPath() (string, error) {
+	dir, err := helpers.GetConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "daemon.lock"), nil
+}
+
 func New(debug bool) (*Daemon, error) {
 	socketPath, err := SocketPath()
 	if err != nil {
@@ -94,6 +105,11 @@ func New(debug bool) (*Daemon, error) {
 	}
 
 	pidFile, err := pidPath()
+	if err != nil {
+		return nil, err
+	}
+
+	lockFile, err := daemonLockPath()
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +123,7 @@ func New(debug bool) (*Daemon, error) {
 		shutdown:      make(chan struct{}),
 		socketPath:    socketPath,
 		pidPath:       pidFile,
+		lockPath:      lockFile,
 		debug:         debug,
 		passwordCache: make(map[string]string),
 	}, nil
@@ -124,6 +141,11 @@ func Run(debug bool) error {
 	defer d.closeLogging()
 
 	d.logger.Info("daemon starting")
+
+	if err := d.acquireLock(); err != nil {
+		return err
+	}
+	defer d.releaseLock()
 
 	if err := d.killOldDaemon(); err != nil {
 		d.logger.Warn("failed to kill old daemon", "err", err)
@@ -190,6 +212,41 @@ func (d *Daemon) closeLogging() {
 	}
 }
 
+func (d *Daemon) acquireLock() error {
+	if err := os.MkdirAll(filepath.Dir(d.lockPath), 0o755); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(d.lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if err == syscall.EWOULDBLOCK {
+			return fmt.Errorf("daemon already running")
+		}
+		return err
+	}
+
+	if err := f.Truncate(0); err == nil {
+		_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0)
+	}
+
+	d.lockFile = f
+	return nil
+}
+
+func (d *Daemon) releaseLock() {
+	if d.lockFile == nil {
+		return
+	}
+	_ = syscall.Flock(int(d.lockFile.Fd()), syscall.LOCK_UN)
+	_ = d.lockFile.Close()
+	d.lockFile = nil
+}
+
 func (d *Daemon) killOldDaemon() error {
 	data, err := os.ReadFile(d.pidPath)
 	if err != nil {
@@ -243,7 +300,9 @@ func (d *Daemon) listen() error {
 		return err
 	}
 
-	os.Remove(d.socketPath)
+	if err := d.prepareSocketPath(); err != nil {
+		return err
+	}
 
 	listener, err := net.Listen("unix", d.socketPath)
 	if err != nil {
@@ -252,7 +311,30 @@ func (d *Daemon) listen() error {
 
 	os.Chmod(d.socketPath, 0o600)
 	d.listener = listener
+	d.socketOwned = true
 	return nil
+}
+
+func (d *Daemon) prepareSocketPath() error {
+	info, err := os.Stat(d.socketPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	if info.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("socket path exists and is not a socket")
+	}
+
+	conn, err := net.DialTimeout("unix", d.socketPath, 100*time.Millisecond)
+	if err == nil {
+		conn.Close()
+		return fmt.Errorf("daemon already running")
+	}
+
+	return os.Remove(d.socketPath)
 }
 
 func (d *Daemon) acceptLoop() {
@@ -607,7 +689,7 @@ func (d *Daemon) Shutdown() {
 	if d.listener != nil {
 		d.listener.Close()
 	}
-	os.Remove(d.socketPath)
+	d.cleanupSocket()
 }
 
 func (d *Daemon) Close() {
@@ -619,5 +701,13 @@ func (d *Daemon) Close() {
 		d.client.Close()
 	}
 	d.clientMu.Unlock()
-	os.Remove(d.socketPath)
+	d.cleanupSocket()
+}
+
+func (d *Daemon) cleanupSocket() {
+	if !d.socketOwned {
+		return
+	}
+	_ = os.Remove(d.socketPath)
+	d.socketOwned = false
 }
