@@ -230,6 +230,7 @@ func GetPassword(connectionID string) (string, error) {
 - Config updates from connection create/edit are synced to daemon immediately.
 - Daemon lock handling was tightened to reduce stale lock and duplicate daemon issues.
 - Installer behavior was improved for piped `install.sh` and OS-specific install directories.
+- Output pane supports log clearing via double-tap `x` confirm; this truncates `~/.config/lazyopenconnect/vpn.log` in daemon and resets client log window.
 
 ### Client-Daemon Model
 
@@ -303,6 +304,7 @@ DisconnectCmd{Type: "disconnect"}
 InputCmd{Type: "input", Value: "..."}
 ConfigUpdateCmd{Type: "config_update", Config: {...}}
 GetStateCmd{Type: "get_state"}
+ClearLogsCmd{Type: "clear_logs"}
 ShutdownCmd{Type: "shutdown"}
 ```
 

@@ -31,6 +31,7 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 - **Daemon architecture** - VPN runs in a background daemon, TUI connects via Unix socket
 - **Automatic daemon management** - Daemon auto-restarts on version mismatch, auto-starts with client, and supports `daemon stop all` for stale processes
 - **Efficient log handling** - VPN logs stored in file with lazy loading (paginated fetch as you scroll)
+- **Fast log reset** - Clear VPN logs with `x` then `x` in Output pane (clears both UI window and `vpn.log`)
 - **Interactive prompts** - Handle 2FA, OTP, and other authentication prompts directly in the TUI
 - **Smart disconnect cleanup** - Uses OpenConnect built-in cleanup first, then falls back to manual route/DNS/interface cleanup
 - **Reconnect on wake** - Better reliability after laptop sleep/wake cycles
@@ -222,12 +223,13 @@ Follows a **Client-Daemon** architecture built on Bubble Tea's Elm-style pattern
 | `c`                 | Run network cleanup                                |
 | `n`                 | Add new connection                                 |
 | `e`                 | Edit selected connection                           |
-| `D`                 | Delete connection                                  |
+| `x`                 | Delete connection                                  |
 | `1-4`               | Focus pane (status, connections, settings, output) |
 | `Tab` / `Shift+Tab` | Cycle focus                                        |
 | `j/k` or `↑/↓`      | Navigate                                           |
 | `g/G`               | Top/bottom                                         |
 | `Ctrl+d/u`          | Page scroll                                        |
+| `x` then `x` (Output pane) | Clear VPN logs (double-tap confirm)         |
 
 ## Troubleshooting
 
@@ -265,6 +267,8 @@ cat ~/.config/lazyopenconnect/daemon.log
 ### VPN log file
 
 VPN connection output is stored in `~/.config/lazyopenconnect/vpn.log` (not in memory). The TUI uses lazy loading to fetch log ranges as you scroll, keeping memory usage constant even for long-running connections:
+
+In the Output pane, press `x` then `x` within 2 seconds to clear logs. This clears both the visible output window and the underlying `vpn.log` file via the daemon.
 
 ```bash
 # View full VPN session log
