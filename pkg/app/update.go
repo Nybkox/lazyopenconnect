@@ -182,7 +182,7 @@ func (a *App) handleDaemonLog(msg map[string]any) (tea.Model, tea.Cmd) {
 		}
 
 		a.viewport.SetContent(a.renderOutput())
-		if a.viewport.AtBottom() {
+		if a.viewport.AtBottom() || a.State.FocusedPane != PaneOutput {
 			a.viewport.GotoBottom()
 		}
 	}
