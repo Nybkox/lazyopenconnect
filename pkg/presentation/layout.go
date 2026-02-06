@@ -108,7 +108,7 @@ func renderStatusContent(state *app.State) string {
 	case app.StatusPrompting:
 		return fmt.Sprintf("%s Awaiting input...", WarningStyle.Render("○"))
 	case app.StatusReconnecting:
-		return fmt.Sprintf("%s Reconnecting... (attempt %d/5)",
+		return fmt.Sprintf("%s Reconnecting... (attempt %d/3)",
 			WarningStyle.Render("◐"), state.ReconnectAttempts)
 	default:
 		return fmt.Sprintf("%s Disconnected", MutedStyle.Render("○"))
