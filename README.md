@@ -26,7 +26,9 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 - **Multi-pane interface** - Status, connections, settings, output log, and input in one view
 - **Secure password storage** - Passwords stored in system keychain (macOS Keychain, Linux Secret Service, Windows Credential Manager)
 - **Auto-reconnect** - Automatically reconnect when connection drops (configurable)
-- **External VPN detection** - Detects and displays OpenConnect processes started outside the TUI
+- **External VPN detection** - Detects OpenConnect processes started outside the TUI and displays them with status
+- **Auto-cleanup** - Automatically runs network cleanup (routes, DNS, interfaces) after disconnect
+- **Connection timeout** - Connections that hang for 30s are automatically terminated
 - **Detach/attach support** - Close the TUI while keeping VPN connected (`q` to detach, `Q` to quit)
 - **Daemon architecture** - VPN runs in a background daemon, TUI connects via Unix socket
 - **Automatic daemon management** - Daemon auto-restarts on version mismatch, auto-starts with client, and supports `daemon stop all` for stale processes
@@ -38,6 +40,10 @@ Using the OpenConnect CLI directly works, but gets annoying fast. I stuck with a
 - **Config-to-daemon sync** - Connection create/edit changes are synced to daemon immediately
 - **Hardened daemon locking** - Reduced stale lock and duplicate daemon edge cases
 - **Vim-style navigation** - `j/k` for movement, `g/G` for top/bottom, `ctrl+d/u` for page scroll
+- **Connection search** - Filter connections by name or host with `/`
+- **Connection reordering** - Move connections up/down with `J/K`
+- **Log rotation** - Daemon log automatically rotated when exceeding 5MB
+- **Server certificate field** - Dedicated field for `--servercert` instead of using raw flags
 
 ## Screenshots
 
@@ -162,7 +168,8 @@ Configuration is stored in `~/.config/lazyopenconnect/config.json`.
 | `host`        | VPN server hostname                                                   |
 | `username`    | Login username (optional)                                             |
 | `hasPassword` | Whether password is stored in keychain                                |
-| `flags`       | Additional openconnect flags (e.g., `--servercert=...`)               |
+| `serverCert`  | Server certificate hash for `--servercert` pin                        |
+| `flags`       | Additional openconnect flags                                          |
 
 ### Settings
 
@@ -224,6 +231,8 @@ Follows a **Client-Daemon** architecture built on Bubble Tea's Elm-style pattern
 | `n`                 | Add new connection                                 |
 | `e`                 | Edit selected connection                           |
 | `x`                 | Delete connection                                  |
+| `/`                 | Search/filter connections                           |
+| `J/K`               | Move connection up/down                             |
 | `1-4`               | Focus pane (status, connections, settings, output) |
 | `Tab` / `Shift+Tab` | Cycle focus                                        |
 | `j/k` or `↑/↓`      | Navigate                                           |

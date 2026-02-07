@@ -5,6 +5,7 @@ import (
 
 	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/daemon"
+	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
 func (a *App) connect() (tea.Model, tea.Cmd) {
@@ -36,7 +37,22 @@ func (a *App) connect() (tea.Model, tea.Cmd) {
 		Password: password,
 	})
 
-	return a, spinnerTick()
+	return a, tea.Batch(spinnerTick(), scheduleConnectionTimeout())
+}
+
+func (a *App) handleConnectionTimeout() (tea.Model, tea.Cmd) {
+	if a.State.Status != StatusConnecting {
+		return a, nil
+	}
+
+	a.State.OutputLines = append(a.State.OutputLines,
+		ui.LogError("Connection timed out after 30s"))
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoBottom()
+
+	a.SendToDaemon(daemon.DisconnectCmd{Type: "disconnect"})
+
+	return a, nil
 }
 
 func (a *App) disconnect() (tea.Model, tea.Cmd) {

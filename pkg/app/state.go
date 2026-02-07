@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/huh"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
@@ -86,6 +88,10 @@ type State struct {
 
 	ShowingHelp bool
 	HelpScroll  int
+
+	FilterActive  bool
+	FilterText    string
+	FilterIndices []int
 }
 
 func NewState(cfg *models.Config) *State {
@@ -114,14 +120,47 @@ func (s *State) ActiveConnection() *models.Connection {
 	return s.FindConnectionByID(s.ActiveConnID)
 }
 
+func (s *State) RealIndex(selected int) int {
+	if !s.FilterActive || len(s.FilterIndices) == 0 {
+		return selected
+	}
+	if selected < 0 || selected >= len(s.FilterIndices) {
+		return -1
+	}
+	return s.FilterIndices[selected]
+}
+
 func (s *State) SelectedConnection() *models.Connection {
-	if len(s.Config.Connections) == 0 {
+	idx := s.RealIndex(s.Selected)
+	if idx < 0 || idx >= len(s.Config.Connections) {
 		return nil
 	}
-	if s.Selected < 0 || s.Selected >= len(s.Config.Connections) {
-		return nil
+	return &s.Config.Connections[idx]
+}
+
+func (s *State) FilteredConnectionCount() int {
+	if s.FilterActive {
+		return len(s.FilterIndices)
 	}
-	return &s.Config.Connections[s.Selected]
+	return len(s.Config.Connections)
+}
+
+func (s *State) UpdateFilter() {
+	if !s.FilterActive || s.FilterText == "" {
+		s.FilterIndices = nil
+		return
+	}
+	query := strings.ToLower(s.FilterText)
+	s.FilterIndices = nil
+	for i, conn := range s.Config.Connections {
+		if strings.Contains(strings.ToLower(conn.Name), query) ||
+			strings.Contains(strings.ToLower(conn.Host), query) {
+			s.FilterIndices = append(s.FilterIndices, i)
+		}
+	}
+	if s.Selected >= len(s.FilterIndices) {
+		s.Selected = max(len(s.FilterIndices)-1, 0)
+	}
 }
 
 func (s *State) MatchConnectionByHost(host string) *models.Connection {

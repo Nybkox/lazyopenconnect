@@ -40,6 +40,10 @@ type KeyMap struct {
 	CopyLogs key.Binding
 
 	Help key.Binding
+
+	Search   key.Binding
+	MoveUp   key.Binding
+	MoveDown key.Binding
 }
 
 func DefaultKeyMap() KeyMap {
@@ -81,5 +85,9 @@ func DefaultKeyMap() KeyMap {
 		CopyLogs: key.NewBinding(key.WithKeys("C")),
 
 		Help: key.NewBinding(key.WithKeys("?")),
+
+		Search:   key.NewBinding(key.WithKeys("/")),
+		MoveUp:   key.NewBinding(key.WithKeys("K")),
+		MoveDown: key.NewBinding(key.WithKeys("J")),
 	}
 }

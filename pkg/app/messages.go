@@ -54,14 +54,6 @@ func scheduleClearLogsTimeout() tea.Cmd {
 	})
 }
 
-type externalCheckTickMsg struct{}
-
-func (a *App) scheduleExternalCheck() tea.Cmd {
-	return tea.Tick(5*time.Second, func(time.Time) tea.Msg {
-		return externalCheckTickMsg{}
-	})
-}
-
 type UpdateCheckMsg struct {
 	Available bool
 	Version   string

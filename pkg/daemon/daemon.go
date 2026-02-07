@@ -26,6 +26,7 @@ const (
 	StatusConnecting
 	StatusPrompting
 	StatusConnected
+	StatusExternal
 )
 
 type DaemonState struct {
@@ -36,6 +37,8 @@ type DaemonState struct {
 	LogLineCount    int
 	Config          *models.Config
 	NetworkSnapshot *helpers.NetworkSnapshot
+	ExternalHost    string
+	ExternalPID     int
 }
 
 type Daemon struct {
@@ -168,6 +171,7 @@ func Run(debug bool) error {
 	d.logger.Info("daemon listening", "socket", d.socketPath, "pid", os.Getpid(), "version", d.version)
 
 	go d.wakeMonitor()
+	go d.externalVPNMonitor()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
@@ -183,6 +187,8 @@ func Run(debug bool) error {
 	return nil
 }
 
+const maxLogSize = 5 * 1024 * 1024 // 5MB
+
 func (d *Daemon) setupLogging() error {
 	logFile, err := logPath()
 	if err != nil {
@@ -192,6 +198,8 @@ func (d *Daemon) setupLogging() error {
 	if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
 		return err
 	}
+
+	rotateLogFile(logFile)
 
 	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
@@ -208,6 +216,14 @@ func (d *Daemon) setupLogging() error {
 	handler := slog.NewTextHandler(f, &slog.HandlerOptions{Level: level})
 	d.logger = slog.New(handler)
 	return nil
+}
+
+func rotateLogFile(path string) {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < maxLogSize {
+		return
+	}
+	_ = os.Rename(path, path+".1")
 }
 
 func (d *Daemon) closeLogging() {
@@ -466,6 +482,7 @@ func (d *Daemon) handleGetState() {
 	ip := d.state.IP
 	pid := d.state.PID
 	logLineCount := d.state.LogLineCount
+	externalHost := d.state.ExternalHost
 	d.stateMu.RUnlock()
 
 	d.logger.Debug("sending state", "status", status, "conn_id", connID)
@@ -476,6 +493,7 @@ func (d *Daemon) handleGetState() {
 		IP:            ip,
 		PID:           pid,
 		TotalLogLines: logLineCount,
+		ExternalHost:  externalHost,
 	})
 }
 
@@ -506,6 +524,7 @@ func parseConfig(data map[string]any) *models.Config {
 					Host:        getString(connMap, "host"),
 					Username:    getString(connMap, "username"),
 					HasPassword: getBool(connMap, "hasPassword"),
+					ServerCert:  getString(connMap, "serverCert"),
 					Flags:       getString(connMap, "flags"),
 				}
 				cfg.Connections = append(cfg.Connections, conn)
@@ -516,6 +535,7 @@ func parseConfig(data map[string]any) *models.Config {
 	if settings, ok := data["settings"].(map[string]any); ok {
 		cfg.Settings.DNS = getString(settings, "dns")
 		cfg.Settings.Reconnect = getBool(settings, "reconnect")
+		cfg.Settings.AutoCleanup = getBool(settings, "autoCleanup")
 		cfg.Settings.TunnelInterface = getString(settings, "tunnelInterface")
 		cfg.Settings.NetInterface = getString(settings, "netInterface")
 		cfg.Settings.WifiInterface = getString(settings, "wifiInterface")
@@ -737,6 +757,56 @@ func (d *Daemon) handleCleanup() {
 	}
 
 	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
+}
+
+func (d *Daemon) runAutoCleanup() {
+	d.cleanupMu.Lock()
+	if d.cleanupRunning {
+		d.cleanupMu.Unlock()
+		return
+	}
+	d.cleanupRunning = true
+	d.cleanupMu.Unlock()
+
+	go func() {
+		defer func() {
+			d.cleanupMu.Lock()
+			d.cleanupRunning = false
+			d.cleanupMu.Unlock()
+		}()
+
+		d.logger.Info("running auto-cleanup after disconnect")
+
+		d.stateMu.RLock()
+		snap := d.state.NetworkSnapshot
+		settings := d.state.Config.Settings
+		d.stateMu.RUnlock()
+
+		if snap == nil {
+			snap = helpers.CaptureNetworkSnapshot()
+		}
+		if settings.NetInterface != "" {
+			snap.DefaultInterface = settings.NetInterface
+		}
+		if settings.WifiInterface != "" {
+			snap.WifiServiceName = settings.WifiInterface
+		}
+		if settings.DNS != "" {
+			snap.DNSServers = strings.Fields(settings.DNS)
+		}
+		if settings.TunnelInterface != "" {
+			snap.TunnelInterface = settings.TunnelInterface
+		}
+
+		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "--- Auto-cleanup ---"})
+
+		results := helpers.RunCleanupSteps(snap)
+		for _, line := range helpers.FormatCleanupResults(results) {
+			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: line})
+		}
+
+		d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
+	}()
 }
 
 func (d *Daemon) Shutdown() {

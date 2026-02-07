@@ -88,8 +88,9 @@ func (a *App) resetSettings() (tea.Model, tea.Cmd) {
 	a.State.ResetPending = false
 
 	a.State.Config.Settings = models.Settings{
-		DNS:       "",
-		Reconnect: false,
+		DNS:         "",
+		Reconnect:   false,
+		AutoCleanup: true,
 	}
 
 	_ = helpers.SaveConfig(a.State.Config)
@@ -142,7 +143,10 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		existing := a.State.SelectedConnection()
 		if existing != nil {
 			conn := data.ToConnection(existing)
-			a.State.Config.Connections[a.State.Selected] = *conn
+			realIdx := a.State.RealIndex(a.State.Selected)
+			if realIdx >= 0 {
+				a.State.Config.Connections[realIdx] = *conn
+			}
 
 			if strings.TrimSpace(data.Password) != "" {
 				_ = helpers.SetPassword(conn.ID, data.Password)
@@ -159,10 +163,17 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 			if conn != nil {
 				_ = helpers.DeletePassword(conn.ID)
 
-				a.State.Config.Connections = append(
-					a.State.Config.Connections[:a.State.Selected],
-					a.State.Config.Connections[a.State.Selected+1:]...,
-				)
+				realIdx := a.State.RealIndex(a.State.Selected)
+				if realIdx >= 0 {
+					a.State.Config.Connections = append(
+						a.State.Config.Connections[:realIdx],
+						a.State.Config.Connections[realIdx+1:]...,
+					)
+				}
+
+				a.State.FilterActive = false
+				a.State.FilterText = ""
+				a.State.FilterIndices = nil
 
 				if a.State.Selected >= len(a.State.Config.Connections) && a.State.Selected > 0 {
 					a.State.Selected--

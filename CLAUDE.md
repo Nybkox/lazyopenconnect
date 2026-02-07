@@ -33,7 +33,7 @@ go mod tidy
 
 ## Testing
 
-No tests exist yet. When adding tests:
+Tests exist in `pkg/daemon/daemon_test.go`. When adding tests:
 
 ```bash
 # Run all tests
@@ -67,16 +67,17 @@ go test -cover ./...
 │   │   ├── forms.go                 # Form handling logic
 │   │   ├── daemon_client.go         # Daemon connection client
 │   │   ├── handlers_*.go            # Handlers by concern
-│   ├── daemon/                      # Background daemon (NEW)
+│   ├── daemon/                      # Background daemon
 │   │   ├── daemon.go                # Core daemon, socket handling
 │   │   ├── vpn.go                   # VPN process management (PTY, I/O)
-│   │   └── protocol.go              # JSON message protocol
+│   │   ├── protocol.go              # JSON message protocol
+│   │   ├── reconnect.go             # Auto-reconnect, wake detection
+│   │   └── external.go              # External VPN process detection
 │   ├── models/                      # Data structures (shared)
 │   │   ├── config.go                # Config struct
 │   │   ├── connection.go            # Connection struct
 │   │   ├── settings.go              # Settings struct
 │   ├── controllers/helpers/         # Business logic
-│   │   ├── vpn.go                   # Cleanup commands (legacy)
 │   │   ├── config.go                # Config file I/O
 │   │   ├── keychain.go              # Password storage
 │   │   └── forms.go                 # Form data structs
@@ -245,7 +246,7 @@ The application uses a client-daemon architecture:
 **Logging:**
 - Daemon logs to `~/.config/lazyopenconnect/daemon.log` (internal daemon events)
 - VPN output logs to `~/.config/lazyopenconnect/vpn.log` (connection output)
-- Both use append mode; no automatic rotation
+- `daemon.log` rotates automatically when >5MB (keeps 1 backup as `.1`)
 
 1. **Daemon** (`pkg/daemon/`) runs as a background process, owns the VPN connection
 2. **Client** (`pkg/app/`) is the TUI that connects to the daemon via Unix socket
@@ -311,7 +312,7 @@ ShutdownCmd{Type: "shutdown"}
 **Daemon → Client:**
 ```go
 HelloResponse{Type: "hello_response", Version: "...", Compatible: true}
-StateMsg{Type: "state", Status: ..., ActiveConnID: ..., IP: ..., PID: ...}
+StateMsg{Type: "state", Status: ..., ActiveConnID: ..., IP: ..., PID: ..., ExternalHost: "..."}
 LogMsg{Type: "log", Line: "..."}
 PromptMsg{Type: "prompt", IsPassword: true}
 ConnectedMsg{Type: "connected", IP: "...", PID: ...}
@@ -336,6 +337,8 @@ type RenderFunc func(state *State, spinnerFrame int) string
 2. Add to `ConnectionFormData` in `pkg/controllers/helpers/forms.go`
 3. Update `ToConnection()` and `NewConnectionFormData()`
 4. Add form field in `NewConnectionForm()`
+5. Update `parseConfig()` in `pkg/daemon/daemon.go`
+6. Update `buildArgs()` in `pkg/daemon/vpn.go` if it affects openconnect args
 
 ### Adding a new message type
 

@@ -202,6 +202,10 @@ func buildArgs(conn *models.Connection) []string {
 		args = append(args, "--passwd-on-stdin")
 	}
 
+	if conn.ServerCert != "" {
+		args = append(args, "--servercert="+conn.ServerCert)
+	}
+
 	if conn.Flags != "" {
 		flags := strings.Fields(conn.Flags)
 		args = append(args, flags...)
@@ -382,6 +386,7 @@ func (d *Daemon) handleVPNExit() {
 	wasConnecting := d.state.Status == StatusConnecting
 	wasPrompting := d.state.Status == StatusPrompting
 	reconnectEnabled := d.state.Config.Settings.Reconnect
+	autoCleanup := d.state.Config.Settings.AutoCleanup
 	connID := d.state.ActiveConnID
 	d.state.Status = StatusDisconnected
 	d.state.ActiveConnID = ""
@@ -402,6 +407,10 @@ func (d *Daemon) handleVPNExit() {
 	}
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
+
+	if autoCleanup {
+		d.runAutoCleanup()
+	}
 }
 
 func (d *Daemon) handleDisconnect() {
@@ -409,9 +418,15 @@ func (d *Daemon) handleDisconnect() {
 
 	d.stateMu.RLock()
 	status := d.state.Status
+	externalPID := d.state.ExternalPID
 	d.stateMu.RUnlock()
 
 	if status == StatusDisconnected {
+		return
+	}
+
+	if status == StatusExternal {
+		d.killExternalVPN(externalPID)
 		return
 	}
 
@@ -457,9 +472,14 @@ func (d *Daemon) disconnectVPN() {
 	d.state.ActiveConnID = ""
 	d.state.IP = ""
 	d.state.PID = 0
+	autoCleanup := d.state.Config.Settings.AutoCleanup
 	d.stateMu.Unlock()
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
+
+	if autoCleanup {
+		d.runAutoCleanup()
+	}
 }
 
 func (d *Daemon) handleInput(msg map[string]any) {

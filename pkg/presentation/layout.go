@@ -120,9 +120,22 @@ var spinnerFrame int
 func renderConnectionsContent(state *app.State, maxLines int, paneWidth int, frame int) string {
 	spinnerFrame = frame
 
-	connCount := len(state.Config.Connections)
+	var filterLine string
+	if state.FilterActive {
+		filterLine = MutedStyle.Render("/") + state.FilterText + MutedStyle.Render("▎")
+		maxLines -= 1
+	}
+
+	connCount := state.FilteredConnectionCount()
 	if connCount == 0 {
-		return ConnectionDetailStyle.Render("No connections.\nPress [n] to add one.")
+		content := ConnectionDetailStyle.Render("No connections.\nPress [n] to add one.")
+		if state.FilterActive {
+			if len(state.Config.Connections) > 0 {
+				content = ConnectionDetailStyle.Render("No matches.")
+			}
+			return filterLine + "\n" + content
+		}
+		return content
 	}
 
 	visible := state.ConnectionsVisible
@@ -139,7 +152,11 @@ func renderConnectionsContent(state *app.State, maxLines int, paneWidth int, fra
 
 	var lines []string
 	for i := scroll; i < endIdx; i++ {
-		conn := state.Config.Connections[i]
+		realIdx := state.RealIndex(i)
+		if realIdx < 0 || realIdx >= len(state.Config.Connections) {
+			continue
+		}
+		conn := state.Config.Connections[realIdx]
 		lines = append(lines, renderConnectionItem(state, &conn, i, frame))
 	}
 
@@ -147,6 +164,10 @@ func renderConnectionsContent(state *app.State, maxLines int, paneWidth int, fra
 
 	if connCount > visible {
 		content = addScrollbar(content, maxLines, paneWidth, scroll, connCount, visible)
+	}
+
+	if filterLine != "" {
+		content = filterLine + "\n" + content
 	}
 
 	return content
@@ -218,7 +239,15 @@ func renderConnectionItem(state *app.State, conn *models.Connection, idx int, sp
 	}
 
 	name := style.Render(marker + conn.Name)
-	detail := ConnectionDetailStyle.Render(fmt.Sprintf("  %s · %s", conn.Protocol, conn.Host))
+	detailStr := fmt.Sprintf("  %s · %s", conn.Protocol, conn.Host)
+	if conn.ServerCert != "" {
+		certShort := conn.ServerCert
+		if len(certShort) > 12 {
+			certShort = certShort[:12] + "…"
+		}
+		detailStr += " · cert:" + certShort
+	}
+	detail := ConnectionDetailStyle.Render(detailStr)
 
 	return fmt.Sprintf("%s %s\n%s", name, indicator, detail)
 }
@@ -232,10 +261,15 @@ func renderSettingsContent(state *app.State) string {
 	if state.Config.Settings.Reconnect {
 		reconnect = "on"
 	}
+	cleanup := "off"
+	if state.Config.Settings.AutoCleanup {
+		cleanup = "on"
+	}
 
-	return fmt.Sprintf("%s %s  %s %s",
+	return fmt.Sprintf("%s %s  %s %s  %s %s",
 		MutedStyle.Render("DNS:"), dns,
 		MutedStyle.Render("Reconnect:"), reconnect,
+		MutedStyle.Render("Cleanup:"), cleanup,
 	)
 }
 
@@ -278,10 +312,12 @@ func renderStatusBar(state *app.State, width int) string {
 				help = "[1-5] pane  [c] cleanup  [R][R] restart  [q] detach  [Q] quit  [?] help"
 			}
 		case app.PaneConnections:
-			if state.Status == app.StatusExternal {
-				help = "[j/k] nav  [d] disconnect  [c] cleanup  [n] new  [e] edit  [x] del  [?] help"
+			if state.FilterActive {
+				help = "[j/k] nav  [enter] select  [esc] clear filter"
+			} else if state.Status == app.StatusExternal {
+				help = "[j/k] nav  [d] disconnect  [/] search  [J/K] move  [n] new  [e] edit  [x] del  [?] help"
 			} else {
-				help = "[j/k] nav  [enter] connect  [c] cleanup  [n] new  [e] edit  [x] del  [?] help"
+				help = "[j/k] nav  [enter] connect  [/] search  [J/K] move  [n] new  [e] edit  [x] del  [?] help"
 			}
 		case app.PaneSettings:
 			if state.ResetPending {
@@ -428,6 +464,8 @@ func renderHelpContent(state *app.State, maxHeight int) string {
 	sections = append(sections, helpLine("n", "New connection"))
 	sections = append(sections, helpLine("e", "Edit connection"))
 	sections = append(sections, helpLine("x", "Delete connection"))
+	sections = append(sections, helpLine("/", "Search/filter connections"))
+	sections = append(sections, helpLine("J/K", "Move connection up/down"))
 
 	sections = append(sections, "")
 	sections = append(sections, TitleStyle.Render("── Settings [3] ──"))

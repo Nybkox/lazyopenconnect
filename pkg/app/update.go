@@ -66,6 +66,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case UpdateCheckMsg:
 		return a.handleUpdateCheck(msg)
 
+	case connectionTimeoutMsg:
+		return a.handleConnectionTimeout()
+
 	case UpdatePerformedMsg:
 		return a.handleUpdatePerformed(msg)
 
@@ -146,6 +149,9 @@ func (a *App) handleDaemonState(msg map[string]any) (tea.Model, tea.Cmd) {
 	}
 	if pid, ok := msg["pid"].(float64); ok {
 		a.State.PID = int(pid)
+	}
+	if externalHost, ok := msg["external_host"].(string); ok {
+		a.State.ExternalHost = externalHost
 	}
 	if totalLines, ok := msg["total_log_lines"].(float64); ok {
 		a.State.TotalLogLines = int(totalLines)

@@ -72,6 +72,7 @@ func TestParseConfig(t *testing.T) {
 			"settings": map[string]any{
 				"dns":             "8.8.8.8",
 				"reconnect":       true,
+				"autoCleanup":     true,
 				"tunnelInterface": "utun1",
 				"netInterface":    "en1",
 				"wifiInterface":   "Wi-Fi",
@@ -94,6 +95,7 @@ func TestParseConfig(t *testing.T) {
 
 		assertString(t, "DNS", cfg.Settings.DNS, "8.8.8.8")
 		assertBool(t, "Reconnect", cfg.Settings.Reconnect, true)
+		assertBool(t, "AutoCleanup", cfg.Settings.AutoCleanup, true)
 		assertString(t, "TunnelInterface", cfg.Settings.TunnelInterface, "utun1")
 		assertString(t, "NetInterface", cfg.Settings.NetInterface, "en1")
 		assertString(t, "WifiInterface", cfg.Settings.WifiInterface, "Wi-Fi")

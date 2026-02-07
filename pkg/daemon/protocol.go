@@ -64,6 +64,7 @@ type StateMsg struct {
 	IP            string `json:"ip"`
 	PID           int    `json:"pid"`
 	TotalLogLines int    `json:"total_log_lines"`
+	ExternalHost  string `json:"external_host,omitempty"`
 }
 
 type LogMsg struct {
