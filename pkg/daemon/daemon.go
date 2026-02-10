@@ -759,7 +759,7 @@ func (d *Daemon) handleCleanup() {
 	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
 }
 
-func (d *Daemon) runAutoCleanup() {
+func (d *Daemon) runCleanupSync(label string) {
 	d.cleanupMu.Lock()
 	if d.cleanupRunning {
 		d.cleanupMu.Unlock()
@@ -768,45 +768,47 @@ func (d *Daemon) runAutoCleanup() {
 	d.cleanupRunning = true
 	d.cleanupMu.Unlock()
 
-	go func() {
-		defer func() {
-			d.cleanupMu.Lock()
-			d.cleanupRunning = false
-			d.cleanupMu.Unlock()
-		}()
-
-		d.logger.Info("running auto-cleanup after disconnect")
-
-		d.stateMu.RLock()
-		snap := d.state.NetworkSnapshot
-		settings := d.state.Config.Settings
-		d.stateMu.RUnlock()
-
-		if snap == nil {
-			snap = helpers.CaptureNetworkSnapshot()
-		}
-		if settings.NetInterface != "" {
-			snap.DefaultInterface = settings.NetInterface
-		}
-		if settings.WifiInterface != "" {
-			snap.WifiServiceName = settings.WifiInterface
-		}
-		if settings.DNS != "" {
-			snap.DNSServers = strings.Fields(settings.DNS)
-		}
-		if settings.TunnelInterface != "" {
-			snap.TunnelInterface = settings.TunnelInterface
-		}
-
-		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "--- Auto-cleanup ---"})
-
-		results := helpers.RunCleanupSteps(snap)
-		for _, line := range helpers.FormatCleanupResults(results) {
-			d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: line})
-		}
-
-		d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
+	defer func() {
+		d.cleanupMu.Lock()
+		d.cleanupRunning = false
+		d.cleanupMu.Unlock()
 	}()
+
+	d.logger.Info("running cleanup", "label", label)
+
+	d.stateMu.RLock()
+	snap := d.state.NetworkSnapshot
+	settings := d.state.Config.Settings
+	d.stateMu.RUnlock()
+
+	if snap == nil {
+		snap = helpers.CaptureNetworkSnapshot()
+	}
+	if settings.NetInterface != "" {
+		snap.DefaultInterface = settings.NetInterface
+	}
+	if settings.WifiInterface != "" {
+		snap.WifiServiceName = settings.WifiInterface
+	}
+	if settings.DNS != "" {
+		snap.DNSServers = strings.Fields(settings.DNS)
+	}
+	if settings.TunnelInterface != "" {
+		snap.TunnelInterface = settings.TunnelInterface
+	}
+
+	d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: fmt.Sprintf("--- %s ---", label)})
+
+	results := helpers.RunCleanupSteps(snap)
+	for _, line := range helpers.FormatCleanupResults(results) {
+		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: line})
+	}
+
+	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
+}
+
+func (d *Daemon) runAutoCleanup() {
+	go d.runCleanupSync("Auto-cleanup")
 }
 
 func (d *Daemon) Shutdown() {

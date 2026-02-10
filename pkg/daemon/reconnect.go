@@ -224,6 +224,14 @@ func (d *Daemon) startAutoReconnect(connID string, reason string) {
 			Max:     maxReconnectAttempts,
 		})
 
+		d.stateMu.RLock()
+		autoCleanup := d.state.Config.Settings.AutoCleanup
+		d.stateMu.RUnlock()
+
+		if autoCleanup {
+			d.runCleanupSync("Reconnect cleanup")
+		}
+
 		d.stateMu.Lock()
 		d.state.Status = StatusConnecting
 		d.state.ActiveConnID = connID
@@ -289,9 +297,14 @@ func (d *Daemon) startAutoReconnect(connID string, reason string) {
 	d.addLog(ui.LogError("All reconnect attempts failed"))
 
 	d.stateMu.Lock()
+	autoCleanup := d.state.Config.Settings.AutoCleanup
 	d.state.Status = StatusDisconnected
 	d.state.ActiveConnID = ""
 	d.stateMu.Unlock()
+
+	if autoCleanup {
+		d.runCleanupSync("Reconnect cleanup")
+	}
 
 	d.sendToClient(DisconnectedMsg{Type: "disconnected"})
 }
