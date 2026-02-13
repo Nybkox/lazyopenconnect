@@ -161,8 +161,7 @@ func (d *Daemon) startAutoReconnect(connID string, reason string) {
 		Max:     maxReconnectAttempts,
 	})
 
-	d.addLog(ui.LogWarning("Waiting for network..."))
-	d.logger.Debug("waiting initial delay before network probe")
+	d.logger.Debug("waiting initial delay before reconnect pre-connect cleanup")
 
 	select {
 	case <-cancelCh:
@@ -172,6 +171,27 @@ func (d *Daemon) startAutoReconnect(connID string, reason string) {
 		return
 	case <-time.After(networkWaitInitial):
 	}
+
+	d.runCleanupSync("Reconnect pre-connect cleanup")
+
+	select {
+	case <-cancelCh:
+		d.logger.Debug("reconnect cancelled after pre-connect cleanup")
+		return
+	case <-d.shutdown:
+		return
+	default:
+	}
+
+	d.reconnectMu.Lock()
+	if d.disconnectRequested {
+		d.reconnectMu.Unlock()
+		d.logger.Debug("reconnect cancelled after pre-connect cleanup: disconnect requested")
+		return
+	}
+	d.reconnectMu.Unlock()
+
+	d.addLog(ui.LogWarning("Waiting for network..."))
 
 	if !d.waitForNetwork(conn.Host, cancelCh) {
 		d.logger.Warn("reconnect: network not available")
@@ -223,14 +243,6 @@ func (d *Daemon) startAutoReconnect(connID string, reason string) {
 			Attempt: attempt,
 			Max:     maxReconnectAttempts,
 		})
-
-		d.stateMu.RLock()
-		autoCleanup := d.state.Config.Settings.AutoCleanup
-		d.stateMu.RUnlock()
-
-		if autoCleanup {
-			d.runCleanupSync("Reconnect cleanup")
-		}
 
 		d.stateMu.Lock()
 		d.state.Status = StatusConnecting
