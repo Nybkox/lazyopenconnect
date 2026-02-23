@@ -6,7 +6,7 @@ Go TUI application for managing OpenConnect VPN connections. Built with Bubble T
 
 - **Module**: `github.com/Nybkox/lazyopenconnect`
 - **Go Version**: 1.25.4
-- **Requires**: Root access (`sudo`) to run
+- **Requires**: Root access to start the privileged daemon (client auto-prompts when needed)
 
 ## Build & Run Commands
 
@@ -14,11 +14,11 @@ Go TUI application for managing OpenConnect VPN connections. Built with Bubble T
 # Build
 go build -o lazyopenconnect
 
-# Run (requires root)
-sudo ./lazyopenconnect
+# Run (auto-prompts for sudo only if daemon needs start/restart)
+./lazyopenconnect
 
 # Run directly
-sudo go run main.go
+go run main.go
 
 # Format code
 go fmt ./...

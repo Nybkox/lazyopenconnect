@@ -104,7 +104,7 @@ mv lazyopenconnect ~/.local/bin/
 ### Requirements
 
 - **OpenConnect** - Must be installed and accessible in PATH
-- **Root access** - Required for VPN operations
+- **Root access** - Required to start a privileged daemon (auto-prompted when needed)
 - **macOS** - Currently optimized for macOS (network cleanup commands)
 
 Install OpenConnect:
@@ -123,11 +123,11 @@ sudo dnf install openconnect
 ## Usage
 
 ```bash
-# Run (requires root)
-sudo lazyopenconnect
+# Run
+lazyopenconnect
 
 # Or use the short alias
-sudo lzcon
+lzcon
 
 # Daemon commands
 lazyopenconnect daemon status  # Check if daemon is running
@@ -244,7 +244,9 @@ Follows a **Client-Daemon** architecture built on Bubble Tea's Elm-style pattern
 
 ### "Requires root" error
 
-OpenConnect needs root privileges to create network interfaces. Always run with `sudo`.
+OpenConnect needs root privileges to create network interfaces. `lazyopenconnect` now only prompts for `sudo` when it needs to start/restart the daemon.
+
+If a privileged daemon is already running for your user, launching the TUI does not require `sudo`.
 
 ### "Daemon version mismatch" error
 
@@ -252,7 +254,7 @@ The client and daemon must run the same version. Stop the daemon to let the clie
 
 ```bash
 lazyopenconnect daemon stop
-sudo lazyopenconnect
+lazyopenconnect
 ```
 
 If you suspect stale background daemons from older binaries or aliases, run:

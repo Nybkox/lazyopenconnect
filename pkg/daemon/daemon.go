@@ -330,9 +330,32 @@ func (d *Daemon) listen() error {
 	}
 
 	os.Chmod(d.socketPath, 0o600)
+	if err := d.setSocketOwner(); err != nil {
+		d.logger.Warn("failed to set socket owner", "err", err)
+	}
 	d.listener = listener
 	d.socketOwned = true
 	return nil
+}
+
+func (d *Daemon) setSocketOwner() error {
+	uidStr := os.Getenv("SUDO_UID")
+	gidStr := os.Getenv("SUDO_GID")
+	if uidStr == "" || gidStr == "" {
+		return nil
+	}
+
+	uid, err := strconv.Atoi(uidStr)
+	if err != nil {
+		return fmt.Errorf("invalid SUDO_UID: %w", err)
+	}
+
+	gid, err := strconv.Atoi(gidStr)
+	if err != nil {
+		return fmt.Errorf("invalid SUDO_GID: %w", err)
+	}
+
+	return os.Chown(d.socketPath, uid, gid)
 }
 
 func (d *Daemon) prepareSocketPath() error {
