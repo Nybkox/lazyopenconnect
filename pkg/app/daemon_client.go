@@ -10,7 +10,7 @@ import (
 )
 
 type DaemonMsg struct {
-	Raw map[string]any
+	Raw daemon.IncomingMsg
 }
 
 type DaemonDisconnectedMsg struct{}

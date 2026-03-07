@@ -19,14 +19,16 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
-type ConnStatus int
+type ConnStatus = models.ConnStatus
 
 const (
-	StatusDisconnected ConnStatus = iota
-	StatusConnecting
-	StatusPrompting
-	StatusConnected
-	StatusExternal
+	StatusDisconnected = models.StatusDisconnected
+	StatusConnecting   = models.StatusConnecting
+	StatusPrompting    = models.StatusPrompting
+	StatusConnected    = models.StatusConnected
+	StatusExternal     = models.StatusExternal
+	StatusReconnecting = models.StatusReconnecting
+	StatusQuitting     = models.StatusQuitting
 )
 
 type DaemonState struct {
@@ -71,6 +73,7 @@ type Daemon struct {
 
 	cleanupMu      sync.Mutex
 	cleanupRunning bool
+	shutdownOnce   sync.Once
 }
 
 func SocketPath() (string, error) {
@@ -438,27 +441,57 @@ func (d *Daemon) readLoop(conn net.Conn) {
 	}
 }
 
-func (d *Daemon) handleMessage(msg map[string]any) {
-	msgType, _ := msg["type"].(string)
-	d.logger.Debug("message received", "type", msgType)
+func decodeIncoming[T any](msg IncomingMsg) (T, error) {
+	var decoded T
+	err := msg.Decode(&decoded)
+	return decoded, err
+}
 
-	switch msgType {
+func (d *Daemon) handleMessage(msg IncomingMsg) {
+	d.logger.Debug("message received", "type", msg.Type)
+
+	switch msg.Type {
 	case "hello":
-		d.handleHello(msg)
+		decoded, err := decodeIncoming[HelloCmd](msg)
+		if err != nil {
+			d.logger.Warn("invalid hello message", "err", err)
+			return
+		}
+		d.handleHello(decoded)
 	case "get_state":
 		d.handleGetState()
 	case "get_logs":
-		d.handleGetLogs(msg)
+		decoded, err := decodeIncoming[GetLogsCmd](msg)
+		if err != nil {
+			d.logger.Warn("invalid get_logs message", "err", err)
+			return
+		}
+		d.handleGetLogs(decoded)
 	case "clear_logs":
 		d.handleClearLogs()
 	case "connect":
-		d.handleConnect(msg)
+		decoded, err := decodeIncoming[ConnectCmd](msg)
+		if err != nil {
+			d.logger.Warn("invalid connect message", "err", err)
+			return
+		}
+		d.handleConnect(decoded)
 	case "disconnect":
 		d.handleDisconnect()
 	case "input":
-		d.handleInput(msg)
+		decoded, err := decodeIncoming[InputCmd](msg)
+		if err != nil {
+			d.logger.Warn("invalid input message", "err", err)
+			return
+		}
+		d.handleInput(decoded)
 	case "config_update":
-		d.handleConfigUpdate(msg)
+		decoded, err := decodeIncoming[ConfigUpdateCmd](msg)
+		if err != nil {
+			d.logger.Warn("invalid config_update message", "err", err)
+			return
+		}
+		d.handleConfigUpdate(decoded)
 	case "cleanup":
 		d.cleanupMu.Lock()
 		if d.cleanupRunning {
@@ -473,15 +506,14 @@ func (d *Daemon) handleMessage(msg map[string]any) {
 	case "shutdown":
 		d.Shutdown()
 	default:
-		d.logger.Warn("unknown message type", "type", msgType)
+		d.logger.Warn("unknown message type", "type", msg.Type)
 	}
 }
 
-func (d *Daemon) handleHello(msg map[string]any) {
-	clientVersion, _ := msg["version"].(string)
-	compatible := clientVersion == d.version
+func (d *Daemon) handleHello(msg HelloCmd) {
+	compatible := msg.Version == d.version
 
-	d.logger.Info("hello from client", "client_version", clientVersion, "compatible", compatible)
+	d.logger.Info("hello from client", "client_version", msg.Version, "compatible", compatible)
 
 	d.sendToClient(HelloResponse{
 		Type:       "hello_response",
@@ -520,65 +552,31 @@ func (d *Daemon) handleGetState() {
 	})
 }
 
-func (d *Daemon) handleConfigUpdate(msg map[string]any) {
-	configData, ok := msg["config"].(map[string]any)
-	if !ok {
-		d.logger.Warn("invalid config_update message")
-		return
-	}
-
-	cfg := parseConfig(configData)
+func (d *Daemon) handleConfigUpdate(msg ConfigUpdateCmd) {
+	cfg := sanitizeConfig(msg.Config)
 	d.stateMu.Lock()
 	d.state.Config = cfg
 	d.stateMu.Unlock()
 	d.logger.Info("config updated", "connections", len(cfg.Connections))
 }
 
-func parseConfig(data map[string]any) *models.Config {
-	cfg := models.NewConfig()
+func sanitizeConfig(cfg models.Config) *models.Config {
+	if len(cfg.Connections) == 0 && cfg.Settings == (models.Settings{}) {
+		return models.NewConfig()
+	}
 
-	if conns, ok := data["connections"].([]any); ok {
-		for _, c := range conns {
-			if connMap, ok := c.(map[string]any); ok {
-				conn := models.Connection{
-					ID:          getString(connMap, "id"),
-					Name:        getString(connMap, "name"),
-					Protocol:    getString(connMap, "protocol"),
-					Host:        getString(connMap, "host"),
-					Username:    getString(connMap, "username"),
-					HasPassword: getBool(connMap, "hasPassword"),
-					ServerCert:  getString(connMap, "serverCert"),
-					Flags:       getString(connMap, "flags"),
-				}
-				cfg.Connections = append(cfg.Connections, conn)
-			}
+	clean := models.NewConfig()
+	clean.Settings = cfg.Settings
+	clean.Connections = make([]models.Connection, 0, len(cfg.Connections))
+
+	for _, conn := range cfg.Connections {
+		if conn.ID == "" || conn.Name == "" || conn.Host == "" {
+			continue
 		}
+		clean.Connections = append(clean.Connections, conn)
 	}
 
-	if settings, ok := data["settings"].(map[string]any); ok {
-		cfg.Settings.DNS = getString(settings, "dns")
-		cfg.Settings.Reconnect = getBool(settings, "reconnect")
-		cfg.Settings.AutoCleanup = getBool(settings, "autoCleanup")
-		cfg.Settings.TunnelInterface = getString(settings, "tunnelInterface")
-		cfg.Settings.NetInterface = getString(settings, "netInterface")
-		cfg.Settings.WifiInterface = getString(settings, "wifiInterface")
-	}
-
-	return cfg
-}
-
-func getString(m map[string]any, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
-}
-
-func getBool(m map[string]any, key string) bool {
-	if v, ok := m[key].(bool); ok {
-		return v
-	}
-	return false
+	return clean
 }
 
 func (d *Daemon) sendToClient(msg any) {
@@ -702,16 +700,9 @@ func (d *Daemon) readLogLines(from, to int) []string {
 	return lines
 }
 
-func (d *Daemon) handleGetLogs(msg map[string]any) {
-	from := 0
-	to := -1
-
-	if f, ok := msg["from"].(float64); ok {
-		from = int(f)
-	}
-	if t, ok := msg["to"].(float64); ok {
-		to = int(t)
-	}
+func (d *Daemon) handleGetLogs(msg GetLogsCmd) {
+	from := msg.From
+	to := msg.To
 
 	d.stateMu.RLock()
 	totalLines := d.state.LogLineCount
@@ -742,15 +733,7 @@ func (d *Daemon) handleClearLogs() {
 	d.handleGetState()
 }
 
-func (d *Daemon) handleCleanup() {
-	defer func() {
-		d.cleanupMu.Lock()
-		d.cleanupRunning = false
-		d.cleanupMu.Unlock()
-	}()
-
-	d.logger.Info("running manual cleanup")
-
+func (d *Daemon) cleanupSnapshot() *helpers.NetworkSnapshot {
 	d.stateMu.RLock()
 	snap := d.state.NetworkSnapshot
 	settings := d.state.Config.Settings
@@ -772,14 +755,29 @@ func (d *Daemon) handleCleanup() {
 		snap.TunnelInterface = settings.TunnelInterface
 	}
 
-	d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: "--- Running cleanup ---"})
+	return snap
+}
 
-	results := helpers.RunCleanupSteps(snap)
+func (d *Daemon) runCleanup(label string) {
+	d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: fmt.Sprintf("--- %s ---", label)})
+
+	results := helpers.RunCleanupSteps(d.cleanupSnapshot())
 	for _, line := range helpers.FormatCleanupResults(results) {
 		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: line})
 	}
 
 	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
+}
+
+func (d *Daemon) handleCleanup() {
+	defer func() {
+		d.cleanupMu.Lock()
+		d.cleanupRunning = false
+		d.cleanupMu.Unlock()
+	}()
+
+	d.logger.Info("running manual cleanup")
+	d.runCleanup("Running cleanup")
 }
 
 func (d *Daemon) runCleanupSync(label string) {
@@ -798,36 +796,7 @@ func (d *Daemon) runCleanupSync(label string) {
 	}()
 
 	d.logger.Info("running cleanup", "label", label)
-
-	d.stateMu.RLock()
-	snap := d.state.NetworkSnapshot
-	settings := d.state.Config.Settings
-	d.stateMu.RUnlock()
-
-	if snap == nil {
-		snap = helpers.CaptureNetworkSnapshot()
-	}
-	if settings.NetInterface != "" {
-		snap.DefaultInterface = settings.NetInterface
-	}
-	if settings.WifiInterface != "" {
-		snap.WifiServiceName = settings.WifiInterface
-	}
-	if settings.DNS != "" {
-		snap.DNSServers = strings.Fields(settings.DNS)
-	}
-	if settings.TunnelInterface != "" {
-		snap.TunnelInterface = settings.TunnelInterface
-	}
-
-	d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: fmt.Sprintf("--- %s ---", label)})
-
-	results := helpers.RunCleanupSteps(snap)
-	for _, line := range helpers.FormatCleanupResults(results) {
-		d.sendToClient(CleanupStepMsg{Type: "cleanup_step", Line: line})
-	}
-
-	d.sendToClient(CleanupDoneMsg{Type: "cleanup_done"})
+	d.runCleanup(label)
 }
 
 func (d *Daemon) runAutoCleanup() {
@@ -835,31 +804,37 @@ func (d *Daemon) runAutoCleanup() {
 }
 
 func (d *Daemon) Shutdown() {
-	d.logger.Info("shutting down")
-	close(d.shutdown)
+	d.shutdownOnce.Do(func() {
+		if d.logger != nil {
+			d.logger.Info("shutting down")
+		}
+		close(d.shutdown)
 
-	d.vpnMu.Lock()
-	hasVPN := d.vpnProcess != nil
-	d.vpnMu.Unlock()
-	if hasVPN {
-		d.disconnectVPN()
-	}
+		d.vpnMu.Lock()
+		hasVPN := d.vpnProcess != nil
+		d.vpnMu.Unlock()
+		if hasVPN {
+			d.disconnectVPN()
+		}
 
-	if d.listener != nil {
-		d.listener.Close()
-	}
-	d.cleanupSocket()
+		if d.listener != nil {
+			_ = d.listener.Close()
+		}
+		d.closeVpnLogFile()
+		d.cleanupSocket()
+	})
 }
 
 func (d *Daemon) Close() {
 	if d.listener != nil {
-		d.listener.Close()
+		_ = d.listener.Close()
 	}
 	d.clientMu.Lock()
 	if d.client != nil {
-		d.client.Close()
+		_ = d.client.Close()
 	}
 	d.clientMu.Unlock()
+	d.closeVpnLogFile()
 	d.cleanupSocket()
 }
 

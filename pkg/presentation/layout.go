@@ -32,7 +32,7 @@ func Render(state *app.State, spinnerFrame int) string {
 	inputHeight := 5
 	outputHeight := totalHeight - inputHeight
 
-	statusPane := renderPane("Status", "1", renderStatusContent(state), leftWidth, statusHeight, state.FocusedPane == app.PaneStatus, state.ActiveForm != nil)
+	statusPane := renderPane("Status", "1", renderStatusContent(state, spinnerFrame), leftWidth, statusHeight, state.FocusedPane == app.PaneStatus, state.ActiveForm != nil)
 	connectionsPane := renderPane("Connections", "2", renderConnectionsContent(state, connectionsHeight-3, leftWidth-2, spinnerFrame), leftWidth, connectionsHeight, state.FocusedPane == app.PaneConnections, state.ActiveForm != nil)
 
 	settingsTitle := "Settings"
@@ -82,7 +82,7 @@ func renderPane(title, key, content string, width, height int, focused, formActi
 	return style.Render(inner)
 }
 
-func renderStatusContent(state *app.State) string {
+func renderStatusContent(state *app.State, spinnerFrame int) string {
 	switch state.Status {
 	case app.StatusConnected:
 		conn := state.ActiveConnection()
@@ -115,11 +115,7 @@ func renderStatusContent(state *app.State) string {
 	}
 }
 
-var spinnerFrame int
-
 func renderConnectionsContent(state *app.State, maxLines int, paneWidth int, frame int) string {
-	spinnerFrame = frame
-
 	var filterLine string
 	if state.FilterActive {
 		filterLine = MutedStyle.Render("/") + state.FilterText + MutedStyle.Render("▎")
@@ -294,8 +290,6 @@ func renderStatusBar(state *app.State, width int) string {
 		help = "[j/k] scroll  [esc/?] close  [Q] quit"
 	} else if state.ActiveForm != nil {
 		help = "[tab] next  [enter] save  [esc] cancel"
-	} else if state.ReconnectCountdown > 0 {
-		help = "[esc] cancel reconnect  [?] help"
 	} else {
 		switch state.FocusedPane {
 		case app.PaneStatus:

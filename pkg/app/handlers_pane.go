@@ -4,7 +4,6 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/Nybkox/lazyopenconnect/pkg/controllers/helpers"
 	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
 
@@ -137,7 +136,7 @@ func (a *App) moveConnectionUp() (tea.Model, tea.Cmd) {
 	conns[i-1], conns[i] = conns[i], conns[i-1]
 	a.State.Selected--
 	a.ensureConnectionVisible()
-	_ = helpers.SaveConfig(a.State.Config)
+	a.saveConfig()
 	a.syncConfigToDaemon()
 	return a, nil
 }
@@ -155,7 +154,7 @@ func (a *App) moveConnectionDown() (tea.Model, tea.Cmd) {
 	conns[i], conns[i+1] = conns[i+1], conns[i]
 	a.State.Selected++
 	a.ensureConnectionVisible()
-	_ = helpers.SaveConfig(a.State.Config)
+	a.saveConfig()
 	a.syncConfigToDaemon()
 	return a, nil
 }

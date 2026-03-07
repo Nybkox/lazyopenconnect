@@ -152,16 +152,22 @@ func main() {
 			os.Exit(1)
 		}
 
-		if compatible, ok := resp["compatible"].(bool); ok && compatible {
+		var hello daemon.HelloResponse
+		if err := resp.Decode(&hello); err != nil {
+			conn.Close()
+			fmt.Fprintf(os.Stderr, "Failed to decode daemon response: %v\n", err)
+			os.Exit(1)
+		}
+
+		if hello.Compatible {
 			break
 		}
 
-		daemonVersion, _ := resp["version"].(string)
 		conn.Close()
 
 		if attempt == 0 {
 			fmt.Fprintf(os.Stderr, "Daemon version mismatch (client: %s, daemon: %s), restarting...\n",
-				version.Current, daemonVersion)
+				version.Current, hello.Version)
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}

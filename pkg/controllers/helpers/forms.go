@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -141,24 +142,28 @@ type SettingsFormData struct {
 
 func NewSettingsFormData(settings *models.Settings) *SettingsFormData {
 	return &SettingsFormData{
-		DNS:             settings.GetDNS(),
+		DNS:             settings.DNS,
 		Reconnect:       settings.Reconnect,
 		AutoCleanup:     settings.AutoCleanup,
-		WifiInterface:   settings.GetWifiInterface(),
-		NetInterface:    settings.GetNetInterface(),
-		TunnelInterface: settings.GetTunnelInterface(),
+		WifiInterface:   settings.WifiInterface,
+		NetInterface:    settings.NetInterface,
+		TunnelInterface: settings.TunnelInterface,
 	}
 }
 
 func (d *SettingsFormData) ToSettings() *models.Settings {
 	return &models.Settings{
-		DNS:             d.DNS,
+		DNS:             normalizedValue(d.DNS),
 		Reconnect:       d.Reconnect,
 		AutoCleanup:     d.AutoCleanup,
-		WifiInterface:   d.WifiInterface,
-		NetInterface:    d.NetInterface,
-		TunnelInterface: d.TunnelInterface,
+		WifiInterface:   normalizedValue(d.WifiInterface),
+		NetInterface:    normalizedValue(d.NetInterface),
+		TunnelInterface: normalizedValue(d.TunnelInterface),
 	}
+}
+
+func normalizedValue(value string) string {
+	return strings.TrimSpace(value)
 }
 
 func NewSettingsForm(data *SettingsFormData, width int) *huh.Form {
@@ -168,7 +173,7 @@ func NewSettingsForm(data *SettingsFormData, width int) *huh.Form {
 				Title("DNS Servers").
 				Prompt("> ").
 				Value(&data.DNS).
-				Description("Space-separated DNS servers (e.g. 1.1.1.1 1.0.0.1)"),
+				Description("Leave blank to keep system DNS"),
 
 			huh.NewConfirm().
 				Title("Auto-reconnect").
@@ -184,19 +189,19 @@ func NewSettingsForm(data *SettingsFormData, width int) *huh.Form {
 				Title("WiFi Interface").
 				Prompt("> ").
 				Value(&data.WifiInterface).
-				Description("For networksetup (default: Wi-Fi)"),
+				Description(fmt.Sprintf("Leave blank to auto-detect (common: %s)", models.DefaultWifiInterface())),
 
 			huh.NewInput().
 				Title("Network Interface").
 				Prompt("> ").
 				Value(&data.NetInterface).
-				Description("For ifconfig (default: en0)"),
+				Description(fmt.Sprintf("Leave blank to auto-detect (common: %s)", models.DefaultNetInterface())),
 
 			huh.NewInput().
 				Title("Tunnel Interface").
 				Prompt("> ").
 				Value(&data.TunnelInterface).
-				Description("VPN tunnel interface (default: utun0)"),
+				Description(fmt.Sprintf("Leave blank to auto-detect (common: %s)", models.DefaultTunnelInterface())),
 		).Title("Settings").Description(" "),
 	).WithShowHelp(true).WithTheme(formTheme()).WithWidth(width)
 }

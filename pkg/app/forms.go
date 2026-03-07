@@ -93,7 +93,8 @@ func (a *App) resetSettings() (tea.Model, tea.Cmd) {
 		AutoCleanup: true,
 	}
 
-	_ = helpers.SaveConfig(a.State.Config)
+	a.saveConfig()
+	a.syncConfigToDaemon()
 
 	a.State.OutputLines = append(a.State.OutputLines,
 		ui.LogSuccess("[Settings reset to defaults]"))
@@ -132,10 +133,12 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		a.State.Config.Connections = append(a.State.Config.Connections, *conn)
 
 		if strings.TrimSpace(data.Password) != "" {
-			_ = helpers.SetPassword(conn.ID, data.Password)
+			if err := helpers.SetPassword(conn.ID, data.Password); err != nil {
+				a.appendOutput(ui.LogWarning("[Failed to save password to keychain: " + err.Error() + "]"))
+			}
 		}
 
-		_ = helpers.SaveConfig(a.State.Config)
+		a.saveConfig()
 		a.syncConfigToDaemon()
 
 	case FormEditConn:
@@ -149,10 +152,12 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 			}
 
 			if strings.TrimSpace(data.Password) != "" {
-				_ = helpers.SetPassword(conn.ID, data.Password)
+				if err := helpers.SetPassword(conn.ID, data.Password); err != nil {
+					a.appendOutput(ui.LogWarning("[Failed to save password to keychain: " + err.Error() + "]"))
+				}
 			}
 
-			_ = helpers.SaveConfig(a.State.Config)
+			a.saveConfig()
 			a.syncConfigToDaemon()
 		}
 
@@ -161,7 +166,9 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		if data.Confirmed {
 			conn := a.State.SelectedConnection()
 			if conn != nil {
-				_ = helpers.DeletePassword(conn.ID)
+				if err := helpers.DeletePassword(conn.ID); err != nil {
+					a.appendOutput(ui.LogWarning("[Failed to remove password from keychain: " + err.Error() + "]"))
+				}
 
 				realIdx := a.State.RealIndex(a.State.Selected)
 				if realIdx >= 0 {
@@ -179,7 +186,7 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 					a.State.Selected--
 				}
 
-				_ = helpers.SaveConfig(a.State.Config)
+				a.saveConfig()
 				a.syncConfigToDaemon()
 			}
 		}
@@ -188,7 +195,7 @@ func (a *App) handleFormComplete() (tea.Model, tea.Cmd) {
 		data := a.State.FormData.(*helpers.SettingsFormData)
 		a.State.Config.Settings = *data.ToSettings()
 
-		_ = helpers.SaveConfig(a.State.Config)
+		a.saveConfig()
 		a.syncConfigToDaemon()
 
 	case FormExportLogs:
@@ -266,4 +273,16 @@ func (a *App) syncConfigToDaemon() {
 		Type:   "config_update",
 		Config: *a.State.Config,
 	})
+}
+
+func (a *App) saveConfig() {
+	if err := helpers.SaveConfig(a.State.Config); err != nil {
+		a.appendOutput(ui.LogError("[Failed to save config: " + err.Error() + "]"))
+	}
+}
+
+func (a *App) appendOutput(line string) {
+	a.State.OutputLines = append(a.State.OutputLines, line)
+	a.viewport.SetContent(a.renderOutput())
+	a.viewport.GotoBottom()
 }

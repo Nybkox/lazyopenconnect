@@ -14,7 +14,6 @@ func (a *App) handleUpdateCheck(msg UpdateCheckMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	a.State.UpdateAvailable = true
 	a.State.UpdateVersion = msg.Version
 
 	if a.State.Config.Settings.SkipVersionUpdate != msg.Version {
@@ -51,7 +50,7 @@ func (a *App) handleUpdateFormComplete() (tea.Model, tea.Cmd) {
 
 	case "skip":
 		a.State.Config.Settings.SkipVersionUpdate = a.State.UpdateVersion
-		_ = helpers.SaveConfig(a.State.Config)
+		a.saveConfig()
 	}
 
 	a.State.ActiveForm = nil

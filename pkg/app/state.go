@@ -8,16 +8,16 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 )
 
-type ConnStatus int
+type ConnStatus = models.ConnStatus
 
 const (
-	StatusDisconnected ConnStatus = iota
-	StatusConnecting
-	StatusPrompting
-	StatusConnected
-	StatusExternal
-	StatusReconnecting
-	StatusQuitting
+	StatusDisconnected = models.StatusDisconnected
+	StatusConnecting   = models.StatusConnecting
+	StatusPrompting    = models.StatusPrompting
+	StatusConnected    = models.StatusConnected
+	StatusExternal     = models.StatusExternal
+	StatusReconnecting = models.StatusReconnecting
+	StatusQuitting     = models.StatusQuitting
 )
 
 type FocusedPane int
@@ -53,10 +53,8 @@ type State struct {
 	IsPasswordPrompt bool
 	ExternalHost     string
 
-	DisconnectRequested bool
-	ReconnectAttempts   int
-	ReconnectCountdown  int
-	ReconnectConnID     string
+	ReconnectAttempts int
+	ReconnectConnID   string
 
 	FocusedPane        FocusedPane
 	OutputLines        []string
@@ -82,9 +80,7 @@ type State struct {
 	RestartPending   bool
 	RestartingDaemon bool
 
-	// Update notification
-	UpdateAvailable bool
-	UpdateVersion   string
+	UpdateVersion string
 
 	ShowingHelp bool
 	HelpScroll  int

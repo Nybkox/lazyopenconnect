@@ -2,7 +2,6 @@ package app
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"net"
 	"os"
@@ -116,13 +115,8 @@ func connectAndHello(socketPath string, timeout time.Duration) (helloResult, err
 			conn.Close()
 			return helloResult{}, err
 		}
-		data, err := json.Marshal(resp)
-		if err != nil {
-			conn.Close()
-			return helloResult{}, err
-		}
 		var hello daemon.HelloResponse
-		if err := json.Unmarshal(data, &hello); err != nil {
+		if err := resp.Decode(&hello); err != nil {
 			conn.Close()
 			return helloResult{}, err
 		}
@@ -142,8 +136,8 @@ func connectAndHello(socketPath string, timeout time.Duration) (helloResult, err
 func daemonRunning(socketPath string) bool {
 	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
 	if err != nil {
-		os.Remove(socketPath)
-		return false
+		_, statErr := os.Stat(socketPath)
+		return statErr == nil
 	}
 	conn.Close()
 	return true

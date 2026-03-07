@@ -37,32 +37,6 @@ func DefaultExportPath() string {
 	return filepath.Join("/tmp", "lazyopenconnect", "exported-logs-"+timestamp+".log")
 }
 
-// ExportLogs writes output lines to the specified path, stripping ANSI codes.
-func ExportLogs(path string, lines []string) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-
-	var cleaned []string
-	for _, line := range lines {
-		cleaned = append(cleaned, StripANSI(line))
-	}
-
-	content := strings.Join(cleaned, "\n")
-	return os.WriteFile(path, []byte(content), 0o644)
-}
-
-// CopyLogsToClipboard copies output lines to the system clipboard, stripping ANSI codes.
-func CopyLogsToClipboard(lines []string) error {
-	var cleaned []string
-	for _, line := range lines {
-		cleaned = append(cleaned, StripANSI(line))
-	}
-	content := strings.Join(cleaned, "\n")
-	return clipboard.WriteAll(content)
-}
-
 func VpnLogPath() (string, error) {
 	dir, err := GetConfigDir()
 	if err != nil {

@@ -86,31 +86,29 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
-	msgType, _ := msg.Raw["type"].(string)
-
-	switch msgType {
+	switch msg.Raw.Type {
 	case "hello_response":
-		return a.handleHelloResponse(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleHelloResponse)
 	case "state":
-		return a.handleDaemonState(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonState)
 	case "log":
-		return a.handleDaemonLog(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonLog)
 	case "log_range":
-		return a.handleLogRange(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleLogRange)
 	case "prompt":
-		return a.handleDaemonPrompt(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonPrompt)
 	case "connected":
-		return a.handleDaemonConnected(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonConnected)
 	case "disconnected":
 		return a.handleDaemonDisconnectedEvent()
 	case "error":
-		return a.handleDaemonError(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonError)
 	case "kicked":
 		return a.handleKicked()
 	case "reconnecting":
-		return a.handleDaemonReconnecting(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonReconnecting)
 	case "cleanup_step":
-		return a.handleDaemonCleanupStep(msg.Raw)
+		return handleTypedDaemonMsg(a, msg.Raw, a.handleDaemonCleanupStep)
 	case "cleanup_done":
 		return a.handleDaemonCleanupDone()
 	}
@@ -118,9 +116,20 @@ func (a *App) handleDaemonMsg(msg DaemonMsg) (tea.Model, tea.Cmd) {
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
-func (a *App) handleHelloResponse(msg map[string]any) (tea.Model, tea.Cmd) {
-	compatible, _ := msg["compatible"].(bool)
-	if !compatible {
+func handleTypedDaemonMsg[T any](a *App, msg daemon.IncomingMsg, handler func(T) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
+	var decoded T
+	if err := msg.Decode(&decoded); err != nil {
+		a.State.OutputLines = append(a.State.OutputLines,
+			ui.LogError(fmt.Sprintf("Failed to decode daemon %s message: %v", msg.Type, err)))
+		a.viewport.SetContent(a.renderOutput())
+		a.viewport.GotoBottom()
+		return a, WaitForDaemonMsg(a.DaemonReader)
+	}
+	return handler(decoded)
+}
+
+func (a *App) handleHelloResponse(msg daemon.HelloResponse) (tea.Model, tea.Cmd) {
+	if !msg.Compatible {
 		a.State.OutputLines = append(a.State.OutputLines,
 			ui.LogError("Daemon version mismatch. Please restart the daemon."))
 		a.viewport.SetContent(a.renderOutput())
@@ -137,48 +146,26 @@ func (a *App) handleHelloResponse(msg map[string]any) (tea.Model, tea.Cmd) {
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
-func (a *App) handleDaemonState(msg map[string]any) (tea.Model, tea.Cmd) {
-	if status, ok := msg["status"].(float64); ok {
-		a.State.Status = ConnStatus(int(status))
-	}
-	if connID, ok := msg["active_conn_id"].(string); ok {
-		a.State.ActiveConnID = connID
-	}
-	if ip, ok := msg["ip"].(string); ok {
-		a.State.IP = ip
-	}
-	if pid, ok := msg["pid"].(float64); ok {
-		a.State.PID = int(pid)
-	}
-	if externalHost, ok := msg["external_host"].(string); ok {
-		a.State.ExternalHost = externalHost
-	}
-	if totalLines, ok := msg["total_log_lines"].(float64); ok {
-		a.State.TotalLogLines = int(totalLines)
-		if a.State.TotalLogLines > 0 {
-			from := max(0, a.State.TotalLogLines-MaxLoadedLines)
-			a.requestLogs(from, a.State.TotalLogLines)
-		}
+func (a *App) handleDaemonState(msg daemon.StateMsg) (tea.Model, tea.Cmd) {
+	a.State.Status = ConnStatus(msg.Status)
+	a.State.ActiveConnID = msg.ActiveConnID
+	a.State.IP = msg.IP
+	a.State.PID = msg.PID
+	a.State.ExternalHost = msg.ExternalHost
+	a.State.TotalLogLines = msg.TotalLogLines
+	if a.State.TotalLogLines > 0 {
+		from := max(0, a.State.TotalLogLines-MaxLoadedLines)
+		a.requestLogs(from, a.State.TotalLogLines)
 	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
-func (a *App) handleDaemonLog(msg map[string]any) (tea.Model, tea.Cmd) {
-	line, ok := msg["line"].(string)
-	if !ok {
-		return a, WaitForDaemonMsg(a.DaemonReader)
-	}
+func (a *App) handleDaemonLog(msg daemon.LogMsg) (tea.Model, tea.Cmd) {
+	a.State.TotalLogLines = msg.LineNumber + 1
 
-	lineNum := 0
-	if ln, ok := msg["line_number"].(float64); ok {
-		lineNum = int(ln)
-	}
-
-	a.State.TotalLogLines = lineNum + 1
-
-	if lineNum == a.State.LogLoadedTo {
-		a.State.OutputLines = append(a.State.OutputLines, line)
+	if msg.LineNumber == a.State.LogLoadedTo {
+		a.State.OutputLines = append(a.State.OutputLines, msg.Line)
 		a.State.LogLoadedTo++
 
 		if len(a.State.OutputLines) > MaxLoadedLines {
@@ -196,14 +183,13 @@ func (a *App) handleDaemonLog(msg map[string]any) (tea.Model, tea.Cmd) {
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
-func (a *App) handleDaemonPrompt(msg map[string]any) (tea.Model, tea.Cmd) {
+func (a *App) handleDaemonPrompt(msg daemon.PromptMsg) (tea.Model, tea.Cmd) {
 	a.State.Status = StatusPrompting
 	a.State.FocusedPane = PaneInput
 
-	isPassword, _ := msg["is_password"].(bool)
-	a.State.IsPasswordPrompt = isPassword
+	a.State.IsPasswordPrompt = msg.IsPassword
 
-	if isPassword {
+	if msg.IsPassword {
 		a.input.EchoMode = textinput.EchoPassword
 	} else {
 		a.input.EchoMode = textinput.EchoNormal
@@ -212,16 +198,16 @@ func (a *App) handleDaemonPrompt(msg map[string]any) (tea.Model, tea.Cmd) {
 	return a, tea.Batch(a.input.Focus(), WaitForDaemonMsg(a.DaemonReader))
 }
 
-func (a *App) handleDaemonConnected(msg map[string]any) (tea.Model, tea.Cmd) {
+func (a *App) handleDaemonConnected(msg daemon.ConnectedMsg) (tea.Model, tea.Cmd) {
 	a.State.Status = StatusConnected
 	a.State.ReconnectAttempts = 0
 	a.State.ReconnectConnID = ""
 
-	if ip, ok := msg["ip"].(string); ok && ip != "" {
-		a.State.IP = ip
+	if msg.IP != "" {
+		a.State.IP = msg.IP
 	}
-	if pid, ok := msg["pid"].(float64); ok && pid != 0 {
-		a.State.PID = int(pid)
+	if msg.PID != 0 {
+		a.State.PID = msg.PID
 	}
 
 	return a, WaitForDaemonMsg(a.DaemonReader)
@@ -229,7 +215,15 @@ func (a *App) handleDaemonConnected(msg map[string]any) (tea.Model, tea.Cmd) {
 
 func (a *App) handleDaemonDisconnectedEvent() (tea.Model, tea.Cmd) {
 	if a.State.Status == StatusQuitting {
-		return a, WaitForDaemonMsg(a.DaemonReader)
+		if a.State.Config.Settings.AutoCleanup {
+			return a, WaitForDaemonMsg(a.DaemonReader)
+		}
+		if a.DaemonConn != nil {
+			a.DaemonConn.Close()
+			a.DaemonConn = nil
+			a.DaemonReader = nil
+		}
+		return a, tea.Quit
 	}
 
 	a.State.Status = StatusDisconnected
@@ -245,12 +239,9 @@ func (a *App) handleDaemonDisconnectedEvent() (tea.Model, tea.Cmd) {
 	return a, WaitForDaemonMsg(a.DaemonReader)
 }
 
-func (a *App) handleDaemonError(msg map[string]any) (tea.Model, tea.Cmd) {
-	code, _ := msg["code"].(string)
-	message, _ := msg["message"].(string)
-
+func (a *App) handleDaemonError(msg daemon.ErrorMsg) (tea.Model, tea.Cmd) {
 	a.State.OutputLines = append(a.State.OutputLines,
-		ui.LogError(fmt.Sprintf("Error [%s]: %s", code, message)))
+		ui.LogError(fmt.Sprintf("Error [%s]: %s", msg.Code, msg.Message)))
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 
@@ -296,15 +287,14 @@ func (a *App) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 
 func (a *App) handleSpinnerTick() (tea.Model, tea.Cmd) {
 	a.spinnerFrame++
-	if a.State.Status == StatusConnecting {
+	if a.State.Status == StatusConnecting || a.State.Status == StatusReconnecting {
 		return a, spinnerTick()
 	}
 	return a, nil
 }
 
-func (a *App) handleDaemonCleanupStep(msg map[string]any) (tea.Model, tea.Cmd) {
-	line, _ := msg["line"].(string)
-	a.State.OutputLines = append(a.State.OutputLines, line)
+func (a *App) handleDaemonCleanupStep(msg daemon.CleanupStepMsg) (tea.Model, tea.Cmd) {
+	a.State.OutputLines = append(a.State.OutputLines, msg.Line)
 	a.viewport.SetContent(a.renderOutput())
 	a.viewport.GotoBottom()
 	return a, WaitForDaemonMsg(a.DaemonReader)
@@ -316,6 +306,11 @@ func (a *App) handleDaemonCleanupDone() (tea.Model, tea.Cmd) {
 	a.viewport.GotoBottom()
 
 	if a.State.Status == StatusQuitting {
+		if a.DaemonConn != nil {
+			a.DaemonConn.Close()
+			a.DaemonConn = nil
+			a.DaemonReader = nil
+		}
 		return a, tea.Quit
 	}
 	return a, WaitForDaemonMsg(a.DaemonReader)
@@ -365,7 +360,6 @@ func (a *App) handleRestartDaemon() (tea.Model, tea.Cmd) {
 
 	a.State.RestartPending = false
 	a.State.RestartingDaemon = true
-	a.State.ReconnectCountdown = 0
 	a.State.ReconnectConnID = ""
 	a.State.ReconnectAttempts = 0
 	a.State.OutputLines = append(a.State.OutputLines,
@@ -383,9 +377,7 @@ func (a *App) handleDaemonRestarted(msg daemonRestartedMsg) (tea.Model, tea.Cmd)
 	a.State.IP = ""
 	a.State.PID = 0
 	a.State.ReconnectAttempts = 0
-	a.State.ReconnectCountdown = 0
 	a.State.ReconnectConnID = ""
-	a.State.DisconnectRequested = false
 	a.State.TotalLogLines = 0
 	a.State.LogLoadedFrom = 0
 	a.State.LogLoadedTo = 0
@@ -412,9 +404,7 @@ func (a *App) handleDaemonRestartFailed(msg daemonRestartFailedMsg) (tea.Model, 
 	a.State.IP = ""
 	a.State.PID = 0
 	a.State.ReconnectAttempts = 0
-	a.State.ReconnectCountdown = 0
 	a.State.ReconnectConnID = ""
-	a.State.DisconnectRequested = false
 	a.DaemonConn = nil
 	a.DaemonReader = nil
 	errMsg := "unknown error"
@@ -436,8 +426,11 @@ func (a *App) handleDetach() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleQuit() (tea.Model, tea.Cmd) {
-	if a.State.Status == StatusConnected || a.State.Status == StatusConnecting {
+	switch a.State.Status {
+	case StatusConnected, StatusConnecting, StatusPrompting, StatusExternal, StatusReconnecting:
+		a.State.Status = StatusQuitting
 		a.SendToDaemon(daemon.DisconnectCmd{Type: "disconnect"})
+		return a, WaitForDaemonMsg(a.DaemonReader)
 	}
 	if a.DaemonConn != nil {
 		a.DaemonConn.Close()
@@ -453,17 +446,6 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, a.Keys.Help) {
 		a.State.ShowingHelp = true
 		a.State.HelpScroll = 0
-		return a, nil
-	}
-
-	if a.State.ReconnectCountdown > 0 && key.Matches(msg, a.Keys.Cancel) {
-		a.State.ReconnectCountdown = 0
-		a.State.ReconnectConnID = ""
-		a.State.ReconnectAttempts = 0
-		a.State.OutputLines = append(a.State.OutputLines,
-			ui.LogWarning("[Reconnect cancelled]"))
-		a.viewport.SetContent(a.renderOutput())
-		a.viewport.GotoBottom()
 		return a, nil
 	}
 

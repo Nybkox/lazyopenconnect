@@ -2,7 +2,6 @@ package helpers
 
 import (
 	"os/exec"
-	"strings"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/ui"
 )
@@ -54,9 +53,4 @@ func FormatCleanupResults(results []CleanupResult) []string {
 
 func runCmd(name string, args ...string) error {
 	return exec.Command(name, args...).Run()
-}
-
-func runCmdWithOutput(name string, args ...string) (string, error) {
-	out, err := exec.Command(name, args...).Output()
-	return strings.TrimSpace(string(out)), err
 }

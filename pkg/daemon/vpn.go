@@ -39,9 +39,9 @@ type VPNProcess struct {
 	ptmx *os.File
 }
 
-func (d *Daemon) handleConnect(msg map[string]any) {
-	connID, _ := msg["conn_id"].(string)
-	password, _ := msg["password"].(string)
+func (d *Daemon) handleConnect(msg ConnectCmd) {
+	connID := msg.ConnID
+	password := msg.Password
 
 	d.cancelReconnect()
 
@@ -482,8 +482,8 @@ func (d *Daemon) disconnectVPN() {
 	}
 }
 
-func (d *Daemon) handleInput(msg map[string]any) {
-	value, _ := msg["value"].(string)
+func (d *Daemon) handleInput(msg InputCmd) {
+	value := msg.Value
 
 	d.vpnMu.Lock()
 	proc := d.vpnProcess

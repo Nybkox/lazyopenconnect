@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -56,7 +57,7 @@ func LoadConfig() (*models.Config, error) {
 
 	var cfg models.Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return models.NewConfig(), nil
+		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
 
 	valid := make([]models.Connection, 0, len(cfg.Connections))

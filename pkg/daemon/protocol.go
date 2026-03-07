@@ -3,6 +3,7 @@ package daemon
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"net"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
@@ -126,6 +127,15 @@ type CleanupDoneMsg struct {
 	Type string `json:"type"`
 }
 
+type IncomingMsg struct {
+	Type string
+	raw  json.RawMessage
+}
+
+type messageEnvelope struct {
+	Type string `json:"type"`
+}
+
 func WriteMsg(conn net.Conn, msg any) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -136,14 +146,24 @@ func WriteMsg(conn net.Conn, msg any) error {
 	return err
 }
 
-func ReadMsg(r *bufio.Reader) (map[string]any, error) {
+func ReadMsg(r *bufio.Reader) (IncomingMsg, error) {
 	line, err := r.ReadBytes('\n')
 	if err != nil {
-		return nil, err
+		return IncomingMsg{}, err
 	}
-	var msg map[string]any
-	if err := json.Unmarshal(line, &msg); err != nil {
-		return nil, err
+	var env messageEnvelope
+	if err := json.Unmarshal(line, &env); err != nil {
+		return IncomingMsg{}, err
 	}
-	return msg, nil
+	if env.Type == "" {
+		return IncomingMsg{}, errors.New("missing message type")
+	}
+	return IncomingMsg{Type: env.Type, raw: json.RawMessage(line)}, nil
+}
+
+func (m IncomingMsg) Decode(dst any) error {
+	if len(m.raw) == 0 {
+		return errors.New("empty message")
+	}
+	return json.Unmarshal(m.raw, dst)
 }

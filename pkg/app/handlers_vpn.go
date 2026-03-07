@@ -19,8 +19,14 @@ func (a *App) connect() (tea.Model, tea.Cmd) {
 	}
 
 	var password string
+	var passwordWarning string
 	if conn.HasPassword {
-		password, _ = helpers.GetPassword(conn.ID)
+		storedPassword, err := helpers.GetPassword(conn.ID)
+		if err != nil {
+			passwordWarning = ui.LogWarning("Failed to read saved password; daemon will prompt if needed.")
+		} else {
+			password = storedPassword
+		}
 	}
 
 	a.State.Status = StatusConnecting
@@ -29,6 +35,9 @@ func (a *App) connect() (tea.Model, tea.Cmd) {
 	a.State.TotalLogLines = 0
 	a.State.LogLoadedFrom = 0
 	a.State.LogLoadedTo = 0
+	if passwordWarning != "" {
+		a.State.OutputLines = append(a.State.OutputLines, passwordWarning)
+	}
 	a.viewport.SetContent(a.renderOutput())
 
 	a.SendToDaemon(daemon.ConnectCmd{
@@ -61,7 +70,6 @@ func (a *App) disconnect() (tea.Model, tea.Cmd) {
 		a.State.ReconnectAttempts = 0
 		a.State.ReconnectConnID = ""
 		a.State.ActiveConnID = ""
-		a.State.DisconnectRequested = true
 		a.State.OutputLines = append(a.State.OutputLines, "--- Reconnect cancelled ---")
 		a.viewport.SetContent(a.renderOutput())
 		a.viewport.GotoBottom()
@@ -73,7 +81,6 @@ func (a *App) disconnect() (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	a.State.DisconnectRequested = true
 	a.State.ReconnectConnID = ""
 
 	a.State.OutputLines = append(a.State.OutputLines, "--- Disconnecting ---")
@@ -98,15 +105,12 @@ func (a *App) renderOutput() string {
 	return output
 }
 
-func (a *App) handleDaemonReconnecting(msg map[string]any) (tea.Model, tea.Cmd) {
-	connID, _ := msg["conn_id"].(string)
-	attempt, _ := msg["attempt"].(float64)
-
+func (a *App) handleDaemonReconnecting(msg daemon.ReconnectingMsg) (tea.Model, tea.Cmd) {
 	a.State.Status = StatusReconnecting
-	a.State.ActiveConnID = connID
-	a.State.ReconnectAttempts = int(attempt)
+	a.State.ActiveConnID = msg.ConnID
+	a.State.ReconnectAttempts = msg.Attempt
 
-	if attempt == 0 {
+	if msg.Attempt == 0 {
 		return a, tea.Batch(spinnerTick(), WaitForDaemonMsg(a.DaemonReader))
 	}
 

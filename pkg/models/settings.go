@@ -12,36 +12,20 @@ type Settings struct {
 	SkipVersionUpdate string `json:"skipVersionUpdate"`
 }
 
-func (s *Settings) GetWifiInterface() string {
-	if s.WifiInterface == "" {
-		return "Wi-Fi"
-	}
-	return s.WifiInterface
+func DefaultWifiInterface() string {
+	return "Wi-Fi"
 }
 
-func (s *Settings) GetNetInterface() string {
-	if s.NetInterface != "" {
-		return s.NetInterface
-	}
+func DefaultNetInterface() string {
 	if runtime.GOOS == "darwin" {
 		return "en0"
 	}
 	return "eth0"
 }
 
-func (s *Settings) GetTunnelInterface() string {
-	if s.TunnelInterface != "" {
-		return s.TunnelInterface
-	}
+func DefaultTunnelInterface() string {
 	if runtime.GOOS == "darwin" {
 		return "utun0"
 	}
 	return "tun0"
-}
-
-func (s *Settings) GetDNS() string {
-	if s.DNS == "" {
-		return "1.1.1.1 1.0.0.1"
-	}
-	return s.DNS
 }
