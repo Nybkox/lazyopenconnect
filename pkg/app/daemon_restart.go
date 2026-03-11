@@ -2,12 +2,9 @@ package app
 
 import (
 	"bufio"
-	"errors"
 	"net"
 	"os"
-	"os/exec"
 	"slices"
-	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,110 +32,23 @@ func (a *App) restartDaemonCmd() tea.Cmd {
 
 		if conn != nil {
 			_ = daemon.WriteMsg(conn, daemon.ShutdownCmd{Type: "shutdown"})
-			conn.Close()
+			_ = conn.Close()
 		}
 
-		_ = waitForDaemonDown(socketPath, 2*time.Second)
+		_ = daemon.WaitForDaemonStop(socketPath, 2*time.Second)
 
-		if err := spawnDaemon(isDebugRun()); err != nil {
+		if err := daemon.SpawnDaemon(daemon.SpawnConfig{Debug: isDebugRun()}); err != nil {
 			return daemonRestartFailedMsg{Err: err}
 		}
 
-		result, err := connectAndHello(socketPath, 3*time.Second)
+		result, err := daemon.ConnectAndHello(socketPath, version.Current, 3*time.Second)
 		if err != nil {
 			return daemonRestartFailedMsg{Err: err}
 		}
-		return daemonRestartedMsg(result)
+		return daemonRestartedMsg{Conn: result.Conn, Reader: result.Reader}
 	}
 }
 
 func isDebugRun() bool {
 	return slices.Contains(os.Args[1:], "--debug")
-}
-
-func spawnDaemon(debug bool) error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	args := []string{"daemon", "run"}
-	if debug {
-		args = append(args, "--debug")
-	}
-
-	cmd := exec.Command(exe, args...)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	cmd.Stdin = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-
-	return cmd.Process.Release()
-}
-
-func waitForDaemonDown(socketPath string, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if !daemonRunning(socketPath) {
-			return true
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return !daemonRunning(socketPath)
-}
-
-type helloResult struct {
-	Conn   net.Conn
-	Reader *bufio.Reader
-}
-
-func connectAndHello(socketPath string, timeout time.Duration) (helloResult, error) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", socketPath, 200*time.Millisecond)
-		if err != nil {
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		reader := bufio.NewReader(conn)
-		if err := daemon.WriteMsg(conn, daemon.HelloCmd{Type: "hello", Version: version.Current}); err != nil {
-			conn.Close()
-			return helloResult{}, err
-		}
-		resp, err := daemon.ReadMsg(reader)
-		if err != nil {
-			conn.Close()
-			return helloResult{}, err
-		}
-		var hello daemon.HelloResponse
-		if err := resp.Decode(&hello); err != nil {
-			conn.Close()
-			return helloResult{}, err
-		}
-		if hello.Type != "hello_response" {
-			conn.Close()
-			return helloResult{}, errors.New("unexpected daemon response")
-		}
-		if !hello.Compatible {
-			conn.Close()
-			return helloResult{}, errors.New("daemon version mismatch")
-		}
-		return helloResult{Conn: conn, Reader: reader}, nil
-	}
-	return helloResult{}, errors.New("timeout connecting to daemon")
-}
-
-func daemonRunning(socketPath string) bool {
-	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
-	if err != nil {
-		_, statErr := os.Stat(socketPath)
-		return statErr == nil
-	}
-	conn.Close()
-	return true
 }

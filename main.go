@@ -22,14 +22,6 @@ import (
 	"github.com/Nybkox/lazyopenconnect/pkg/version"
 )
 
-type daemonConnStatus int
-
-const (
-	daemonNotRunning daemonConnStatus = iota
-	daemonReachable
-	daemonInaccessible
-)
-
 var (
 	buildVersion = "dev"
 	commit       = "none"
@@ -88,12 +80,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if buildVersion == "dev" && daemonStatus(socketPath) == daemonReachable {
+	if buildVersion == "dev" && daemon.DaemonStatus(socketPath) == daemon.DaemonReachable {
 		fmt.Println("Dev mode: restarting daemon...")
 		shutdownDaemon(socketPath)
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
-			if daemonStatus(socketPath) != daemonReachable {
+			if daemon.DaemonStatus(socketPath) != daemon.DaemonReachable {
 				break
 			}
 			time.Sleep(100 * time.Millisecond)
@@ -101,30 +93,36 @@ func main() {
 	}
 
 	var conn net.Conn
-	var reader *bufio.Reader
+	var result daemon.HelloResult
 
 	for attempt := 0; attempt < 2; attempt++ {
-		status := daemonStatus(socketPath)
+		status := daemon.DaemonStatus(socketPath)
 		switch status {
-		case daemonInaccessible:
+		case daemon.DaemonInaccessible:
 			fmt.Println("Daemon socket is not accessible, restarting with sudo...")
 			if err := stopAndRespawnDaemon(socketPath); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to restart daemon: %v\n", err)
 				os.Exit(1)
 			}
-			ready := waitForDaemonReady(socketPath, 3*time.Second)
-			if ready != daemonReachable {
+			ready := daemon.WaitForDaemonStart(socketPath, 3*time.Second)
+			if ready != daemon.DaemonReachable {
 				printInaccessibleDaemonHint()
 				os.Exit(1)
 			}
-		case daemonNotRunning:
-			if err := spawnDaemon(); err != nil {
+		case daemon.DaemonNotRunning:
+			if err := daemon.SpawnDaemon(daemon.SpawnConfig{
+				Debug:       debug,
+				Interactive: true,
+				Stdin:       os.Stdin,
+				Stdout:      os.Stdout,
+				Stderr:      os.Stderr,
+			}); err != nil {
 				fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
 				os.Exit(1)
 			}
-			ready := waitForDaemonReady(socketPath, 2*time.Second)
-			if ready != daemonReachable {
-				if ready == daemonInaccessible {
+			ready := daemon.WaitForDaemonStart(socketPath, 2*time.Second)
+			if ready != daemon.DaemonReachable {
+				if ready == daemon.DaemonInaccessible {
 					printInaccessibleDaemonHint()
 				} else {
 					fmt.Fprintln(os.Stderr, "Failed to start daemon: daemon did not become ready")
@@ -133,47 +131,24 @@ func main() {
 			}
 		}
 
-		conn, err = net.Dial("unix", socketPath)
+		result, err = daemon.ConnectAndHello(socketPath, version.Current, 3*time.Second)
 		if err != nil {
+			var mismatchErr *daemon.VersionMismatchError
+			if errors.As(err, &mismatchErr) {
+				if attempt == 0 {
+					fmt.Fprintf(os.Stderr, "%s, restarting...\n", mismatchErr.Error())
+					time.Sleep(500 * time.Millisecond)
+					continue
+				}
+				fmt.Fprintln(os.Stderr, "Failed to restart daemon with matching version")
+				os.Exit(1)
+			}
 			fmt.Fprintf(os.Stderr, "Failed to connect to daemon: %v\n", err)
 			os.Exit(1)
 		}
 
-		daemon.WriteMsg(conn, daemon.HelloCmd{
-			Type:    "hello",
-			Version: version.Current,
-		})
-
-		reader = bufio.NewReader(conn)
-		resp, err := daemon.ReadMsg(reader)
-		if err != nil {
-			conn.Close()
-			fmt.Fprintf(os.Stderr, "Failed to read daemon response: %v\n", err)
-			os.Exit(1)
-		}
-
-		var hello daemon.HelloResponse
-		if err := resp.Decode(&hello); err != nil {
-			conn.Close()
-			fmt.Fprintf(os.Stderr, "Failed to decode daemon response: %v\n", err)
-			os.Exit(1)
-		}
-
-		if hello.Compatible {
-			break
-		}
-
-		conn.Close()
-
-		if attempt == 0 {
-			fmt.Fprintf(os.Stderr, "Daemon version mismatch (client: %s, daemon: %s), restarting...\n",
-				version.Current, hello.Version)
-			time.Sleep(500 * time.Millisecond)
-			continue
-		}
-
-		fmt.Fprintln(os.Stderr, "Failed to restart daemon with matching version")
-		os.Exit(1)
+		conn = result.Conn
+		break
 	}
 	defer conn.Close()
 
@@ -192,7 +167,7 @@ func main() {
 
 	a := app.New(cfg)
 	a.RenderView = presentation.Render
-	a.ConnectToDaemon(conn)
+	a.ConnectToDaemon(result.Conn)
 
 	p := tea.NewProgram(a, tea.WithAltScreen())
 
@@ -200,36 +175,6 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func daemonStatus(socketPath string) daemonConnStatus {
-	conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
-	if err != nil {
-		if isSocketPermissionErr(err) {
-			if _, statErr := os.Stat(socketPath); statErr == nil {
-				return daemonInaccessible
-			}
-		}
-		return daemonNotRunning
-	}
-	conn.Close()
-	return daemonReachable
-}
-
-func waitForDaemonReady(socketPath string, timeout time.Duration) daemonConnStatus {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		status := daemonStatus(socketPath)
-		if status == daemonReachable || status == daemonInaccessible {
-			return status
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	return daemonNotRunning
-}
-
-func isSocketPermissionErr(err error) bool {
-	return errors.Is(err, os.ErrPermission) || errors.Is(err, syscall.EACCES) || errors.Is(err, syscall.EPERM)
 }
 
 func stopAndRespawnDaemon(socketPath string) error {
@@ -249,13 +194,19 @@ func stopAndRespawnDaemon(socketPath string) error {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if daemonStatus(socketPath) == daemonNotRunning {
+		if daemon.DaemonStatus(socketPath) == daemon.DaemonNotRunning {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	if err := spawnDaemon(); err != nil {
+	if err := daemon.SpawnDaemon(daemon.SpawnConfig{
+		Debug:       debug,
+		Interactive: true,
+		Stdin:       os.Stdin,
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
+	}); err != nil {
 		return err
 	}
 
@@ -270,46 +221,7 @@ func printInaccessibleDaemonHint() {
 }
 
 func shutdownDaemon(socketPath string) {
-	conn, err := net.Dial("unix", socketPath)
-	if err != nil {
-		return
-	}
-	daemon.WriteMsg(conn, daemon.ShutdownCmd{Type: "shutdown"})
-	conn.Close()
-}
-
-func spawnDaemon() error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-
-	args := []string{"daemon", "run"}
-	if debug {
-		args = append(args, "--debug")
-	}
-
-	if os.Geteuid() == 0 {
-		cmd := exec.Command(exe, args...)
-		cmd.Stdout = nil
-		cmd.Stderr = nil
-		cmd.Stdin = nil
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-
-		return cmd.Process.Release()
-	}
-
-	fmt.Println("Starting privileged daemon (sudo required)...")
-	sudoArgs := append([]string{"-b", exe}, args...)
-	cmd := exec.Command("sudo", sudoArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	_ = daemon.RequestShutdown(socketPath)
 }
 
 func printHelp() {
@@ -346,25 +258,31 @@ func handleDaemonCmd(args []string) {
 
 	switch args[0] {
 	case "start":
-		status := daemonStatus(socketPath)
-		if status == daemonReachable {
+		status := daemon.DaemonStatus(socketPath)
+		if status == daemon.DaemonReachable {
 			fmt.Println("Daemon is already running")
 			return
 		}
-		if status == daemonInaccessible {
+		if status == daemon.DaemonInaccessible {
 			fmt.Fprintln(os.Stderr, "Daemon is already running but not accessible for this user")
 			fmt.Fprintln(os.Stderr, "Run: sudo lazyopenconnect daemon stop all")
 			os.Exit(1)
 		}
-		if err := spawnDaemon(); err != nil {
+		if err := daemon.SpawnDaemon(daemon.SpawnConfig{
+			Debug:       debug,
+			Interactive: true,
+			Stdin:       os.Stdin,
+			Stdout:      os.Stdout,
+			Stderr:      os.Stderr,
+		}); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to start daemon: %v\n", err)
 			os.Exit(1)
 		}
-		ready := waitForDaemonReady(socketPath, 2*time.Second)
-		if ready == daemonReachable {
+		ready := daemon.WaitForDaemonStart(socketPath, 2*time.Second)
+		if ready == daemon.DaemonReachable {
 			fmt.Println("Daemon started")
 		} else {
-			if ready == daemonInaccessible {
+			if ready == daemon.DaemonInaccessible {
 				fmt.Fprintln(os.Stderr, "Daemon started but socket is not accessible for this user")
 				fmt.Fprintln(os.Stderr, "Run: sudo lazyopenconnect daemon stop all")
 			} else {
@@ -389,8 +307,8 @@ func handleDaemonCmd(args []string) {
 			return
 		}
 
-		status := daemonStatus(socketPath)
-		if status == daemonNotRunning {
+		status := daemon.DaemonStatus(socketPath)
+		if status == daemon.DaemonNotRunning {
 			fmt.Println("Daemon is not running")
 			return
 		}
@@ -404,10 +322,10 @@ func handleDaemonCmd(args []string) {
 		fmt.Println("Daemon stopped")
 
 	case "status":
-		status := daemonStatus(socketPath)
-		if status == daemonReachable {
+		status := daemon.DaemonStatus(socketPath)
+		if status == daemon.DaemonReachable {
 			fmt.Println("Daemon is running")
-		} else if status == daemonInaccessible {
+		} else if status == daemon.DaemonInaccessible {
 			fmt.Println("Daemon is running (inaccessible for current user)")
 		} else {
 			fmt.Println("Daemon is not running")
@@ -441,10 +359,10 @@ func needsSudoForStop(socketPath string, stopAll bool) bool {
 				}
 			}
 		}
-		status := daemonStatus(socketPath)
-		return status == daemonInaccessible
+		status := daemon.DaemonStatus(socketPath)
+		return status == daemon.DaemonInaccessible
 	}
-	return daemonStatus(socketPath) == daemonInaccessible
+	return daemon.DaemonStatus(socketPath) == daemon.DaemonInaccessible
 }
 
 func reExecWithSudo() {
@@ -466,8 +384,8 @@ func reExecWithSudo() {
 }
 
 func stopAllDaemons(socketPath string) error {
-	status := daemonStatus(socketPath)
-	if status == daemonReachable {
+	status := daemon.DaemonStatus(socketPath)
+	if status == daemon.DaemonReachable {
 		shutdownDaemon(socketPath)
 		time.Sleep(150 * time.Millisecond)
 	}
@@ -478,7 +396,7 @@ func stopAllDaemons(socketPath string) error {
 	}
 
 	if len(procs) == 0 {
-		if status == daemonInaccessible {
+		if status == daemon.DaemonInaccessible {
 			os.Remove(socketPath)
 			fmt.Println("Removed stale socket")
 		} else {

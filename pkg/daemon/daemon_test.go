@@ -2,8 +2,16 @@ package daemon
 
 import (
 	"bufio"
+	"encoding/json"
+	"io"
+	"log/slog"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Nybkox/lazyopenconnect/pkg/models"
 )
@@ -94,6 +102,224 @@ func TestReadMsgDecode(t *testing.T) {
 
 	assertString(t, "Version", hello.Version, "1.2.3")
 	assertBool(t, "Compatible", hello.Compatible, true)
+}
+
+func TestReadMsgErrors(t *testing.T) {
+	t.Run("rejects malformed json", func(t *testing.T) {
+		reader := bufio.NewReader(strings.NewReader("{oops}\n"))
+
+		if _, err := ReadMsg(reader); err == nil {
+			t.Fatal("expected error for malformed json")
+		}
+	})
+
+	t.Run("rejects missing type", func(t *testing.T) {
+		reader := bufio.NewReader(strings.NewReader("{\"version\":\"1.2.3\"}\n"))
+
+		if _, err := ReadMsg(reader); err == nil {
+			t.Fatal("expected error for missing type")
+		}
+	})
+}
+
+func TestIncomingMsgDecodeEmpty(t *testing.T) {
+	msg := IncomingMsg{Type: "hello_response"}
+
+	var hello HelloResponse
+	if err := msg.Decode(&hello); err == nil {
+		t.Fatal("expected error for empty message")
+	}
+}
+
+func TestWriteMsgRoundTrip(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- WriteMsg(server, HelloResponse{
+			Type:       "hello_response",
+			Version:    "9.9.9",
+			Compatible: true,
+		})
+	}()
+
+	msg, err := ReadMsg(bufio.NewReader(client))
+	if err != nil {
+		t.Fatalf("ReadMsg returned error: %v", err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("WriteMsg returned error: %v", err)
+	}
+
+	var hello HelloResponse
+	if err := msg.Decode(&hello); err != nil {
+		t.Fatalf("Decode returned error: %v", err)
+	}
+
+	assertString(t, "Type", hello.Type, "hello_response")
+	assertString(t, "Version", hello.Version, "9.9.9")
+	assertBool(t, "Compatible", hello.Compatible, true)
+}
+
+func TestHandleMessageInvalidConfigUpdate(t *testing.T) {
+	d := newTestDaemon()
+	original := d.state.Config
+
+	d.handleMessage(IncomingMsg{
+		Type: "config_update",
+		raw:  json.RawMessage(`{"type":"config_update","config":"bad"}`),
+	})
+
+	if d.state.Config != original {
+		t.Fatal("config should not change when decode fails")
+	}
+}
+
+func TestHandleHelloVersionMismatch(t *testing.T) {
+	d := newTestDaemon()
+	d.version = "server-version"
+
+	server, client := net.Pipe()
+	defer client.Close()
+	d.client = server
+	defer server.Close()
+
+	done := make(chan struct{})
+	go func() {
+		d.handleHello(HelloCmd{Type: "hello", Version: "client-version"})
+		close(done)
+	}()
+
+	msg, err := ReadMsg(bufio.NewReader(client))
+	if err != nil {
+		t.Fatalf("ReadMsg returned error: %v", err)
+	}
+	<-done
+
+	var hello HelloResponse
+	if err := msg.Decode(&hello); err != nil {
+		t.Fatalf("Decode returned error: %v", err)
+	}
+
+	assertString(t, "Type", hello.Type, "hello_response")
+	assertString(t, "Version", hello.Version, "server-version")
+	assertBool(t, "Compatible", hello.Compatible, false)
+
+	select {
+	case <-d.shutdown:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected daemon shutdown after version mismatch")
+	}
+}
+
+func TestShutdownIdempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+	socketPath := filepath.Join(tmpDir, "daemon.sock")
+	if err := os.WriteFile(socketPath, []byte("socket"), 0o600); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	logFile, err := os.Create(filepath.Join(tmpDir, "vpn.log"))
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+
+	listener := &mockListener{}
+	d := newTestDaemon()
+	d.listener = listener
+	d.vpnLogFile = logFile
+	d.socketPath = socketPath
+	d.socketOwned = true
+
+	d.Shutdown()
+	d.Shutdown()
+
+	select {
+	case <-d.shutdown:
+	default:
+		t.Fatal("shutdown channel should be closed")
+	}
+
+	if listener.closeCount != 1 {
+		t.Fatalf("listener Close called %d times, want 1", listener.closeCount)
+	}
+	if d.socketOwned {
+		t.Fatal("socketOwned should be false after cleanup")
+	}
+	if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+		t.Fatalf("expected socket to be removed, got err=%v", err)
+	}
+	if _, err := logFile.WriteString("x"); err == nil {
+		t.Fatal("expected vpn log file to be closed")
+	}
+}
+
+func newTestDaemon() *Daemon {
+	return &Daemon{
+		state: &DaemonState{
+			Status: StatusDisconnected,
+			Config: models.NewConfig(),
+		},
+		shutdown:      make(chan struct{}),
+		passwordCache: make(map[string]string),
+		logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+}
+
+func attachTestClient(t *testing.T, d *Daemon) net.Conn {
+	t.Helper()
+
+	server, client := net.Pipe()
+	d.client = server
+	t.Cleanup(func() {
+		_ = server.Close()
+		_ = client.Close()
+	})
+	return client
+}
+
+func readTestMsg(t *testing.T, conn net.Conn) IncomingMsg {
+	t.Helper()
+	if err := conn.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatalf("SetReadDeadline returned error: %v", err)
+	}
+	msg, err := ReadMsg(bufio.NewReader(conn))
+	if err != nil {
+		t.Fatalf("ReadMsg returned error: %v", err)
+	}
+	return msg
+}
+
+type mockListener struct {
+	mu         sync.Mutex
+	closeCount int
+}
+
+func (l *mockListener) Accept() (net.Conn, error) {
+	return nil, net.ErrClosed
+}
+
+func (l *mockListener) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.closeCount++
+	return nil
+}
+
+func (l *mockListener) Addr() net.Addr {
+	return mockAddr("test")
+}
+
+type mockAddr string
+
+func (a mockAddr) Network() string {
+	return "test"
+}
+
+func (a mockAddr) String() string {
+	return string(a)
 }
 
 func assertString(t *testing.T, field, got, want string) {

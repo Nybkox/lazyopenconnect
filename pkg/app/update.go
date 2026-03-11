@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -409,7 +410,11 @@ func (a *App) handleDaemonRestartFailed(msg daemonRestartFailedMsg) (tea.Model, 
 	a.DaemonReader = nil
 	errMsg := "unknown error"
 	if msg.Err != nil {
-		errMsg = msg.Err.Error()
+		if errors.Is(msg.Err, daemon.ErrDaemonPrivilegeRequired) {
+			errMsg = "restart requires sudo; use `lazyopenconnect daemon start` or run `sudo lazyopenconnect daemon stop all`"
+		} else {
+			errMsg = msg.Err.Error()
+		}
 	}
 	a.State.OutputLines = append(a.State.OutputLines,
 		ui.LogError("[Daemon restart failed: "+errMsg+"]"))
