@@ -309,9 +309,9 @@ func renderStatusBar(state *app.State, width int) string {
 			if state.FilterActive {
 				help = "[j/k] nav  [enter] select  [esc] clear filter"
 			} else if state.Status == app.StatusExternal {
-				help = "[j/k] nav  [d] disconnect  [/] search  [J/K] move  [n] new  [e] edit  [x] del  [?] help"
+				help = "[j/k] nav  [d] disconnect  [/] search  [J/K] move  [n] new  [e] edit  [x] del [q] detach  [Q] quit  [?] help"
 			} else {
-				help = "[j/k] nav  [enter] connect  [/] search  [J/K] move  [n] new  [e] edit  [x] del  [?] help"
+				help = "[j/k] nav  [enter] connect  [/] search  [J/K] move  [n] new  [e] edit  [x] del [q] detach  [Q] quit  [?] help"
 			}
 		case app.PaneSettings:
 			if state.ResetPending {
