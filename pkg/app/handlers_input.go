@@ -67,17 +67,6 @@ func (a *App) clearOutputLogs() {
 }
 
 func (a *App) updateInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if key.Matches(msg, a.Keys.Quit) {
-		return a.handleQuit()
-	}
-
-	if msg.String() == "ctrl+d" {
-		if a.State.Status == StatusExternal || a.State.Status == StatusConnected || a.State.Status == StatusReconnecting {
-			return a.disconnect()
-		}
-		return a, nil
-	}
-
 	if key.Matches(msg, a.Keys.Submit) {
 		if a.DaemonConn != nil && a.input.Value() != "" {
 			value := a.input.Value()

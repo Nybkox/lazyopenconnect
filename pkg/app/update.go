@@ -448,6 +448,15 @@ func (a *App) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a.handleHelpKeys(msg)
 	}
 
+	if a.State.FocusedPane == PaneInput {
+		if key.Matches(msg, a.Keys.TabFocus) {
+			a.cycleFocus()
+			a.input.Blur()
+			return a, nil
+		}
+		return a.updateInput(msg)
+	}
+
 	if key.Matches(msg, a.Keys.Help) {
 		a.State.ShowingHelp = true
 		a.State.HelpScroll = 0
